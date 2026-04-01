@@ -121,9 +121,15 @@ void BindIncrementalTriangulator(py::module& m) {
       .def("retriangulate",
            &IncrementalTriangulator::Retriangulate,
            "options"_a,
+           "ignore_image_ids"_a = std::nullopt,
            "Perform retriangulation for under-reconstructed image pairs. "
-           "Under-reconstruction usually occurs in the case of a drifting "
-           "reconstruction.")
+           "Optionally skip pairs containing images in ignore_image_ids.")
+      .def("get_merge_log",
+           &IncrementalTriangulator::GetMergeLog,
+           "Get the merge log mapping deleted point3D IDs to their successors.")
+      .def("clear_merge_log",
+           &IncrementalTriangulator::ClearMergeLog,
+           "Clear the merge log.")
       .def("add_modified_point3D",
            &IncrementalTriangulator::AddModifiedPoint3D,
            "point3D_id"_a,

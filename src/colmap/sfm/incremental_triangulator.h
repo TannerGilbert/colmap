@@ -34,6 +34,7 @@
 #include "colmap/sfm/observation_manager.h"
 
 #include <memory>
+#include <optional>
 
 namespace colmap {
 
@@ -137,7 +138,10 @@ class IncrementalTriangulator {
   // Image pairs are under-reconstructed if less than `Options::tri_re_min_ratio
   // > tri_ratio`, where `tri_ratio` is the number of triangulated matches over
   // inlier matches between the image pair.
-  size_t Retriangulate(const Options& options);
+  size_t Retriangulate(
+      const Options& options,
+      std::optional<std::unordered_set<image_t>> ignore_image_ids =
+          std::nullopt);
 
   // Indicate that a 3D point has been modified.
   void AddModifiedPoint3D(point3D_t point3D_id);
@@ -147,6 +151,10 @@ class IncrementalTriangulator {
 
   // Clear the collection of changed 3D points.
   void ClearModifiedPoints3D();
+
+  // Merge log: maps each deleted point3D ID to its immediate successor.
+  const std::unordered_map<point3D_t, point3D_t>& GetMergeLog() const;
+  void ClearMergeLog();
 
   // Data for a correspondence / element of a track, used to store all
   // relevant data for triangulation, in order to avoid duplicate lookup
@@ -216,6 +224,10 @@ class IncrementalTriangulator {
   // Changed 3D points, i.e. if a 3D point is modified (created, continued,
   // deleted, merged, etc.). Cleared once `ModifiedPoints3D` is called.
   std::unordered_set<point3D_t> modified_point3D_ids_;
+
+  // Merge log: maps each deleted point3D ID to its immediate successor.
+  // Chain merges produce A->C, C->E; caller resolves chains.
+  std::unordered_map<point3D_t, point3D_t> merge_log_;
 };
 
 std::ostream& operator<<(std::ostream& stream,

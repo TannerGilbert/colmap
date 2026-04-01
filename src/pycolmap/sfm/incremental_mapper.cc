@@ -1,6 +1,7 @@
 #include "colmap/sfm/incremental_mapper.h"
 
 #include "colmap/controllers/incremental_pipeline.h"
+#include "colmap/sfm/incremental_mapper_impl.h"
 
 #include "pycolmap/helpers.h"
 #include "pycolmap/pybind11_extension.h"
@@ -678,4 +679,12 @@ void BindIncrementalMapperImpl(py::module& m) {
 void BindIncrementalMapper(py::module& m) {
   BindIncrementalMapperImpl(m);
   BindIncrementalPipeline(m);
+
+  m.def("find_local_bundle_from_reconstruction",
+        &IncrementalMapperImpl::FindLocalBundle,
+        "options"_a,
+        "image_id"_a,
+        "reconstruction"_a,
+        "Find local bundle for a given image directly from a reconstruction, "
+        "without requiring an IncrementalMapper instance.");
 }

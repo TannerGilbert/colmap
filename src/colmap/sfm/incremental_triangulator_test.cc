@@ -351,5 +351,123 @@ TEST(IncrementalTriangulator, Retriangulate) {
   EXPECT_EQ(reconstruction.NumPoints3D(), synthetic_options.num_points3D);
 }
 
+TEST(IncrementalTriangulator, MergeLogEmpty) {
+  IncrementalTriangulator triangulator(std::make_shared<CorrespondenceGraph>(),
+                                       *new Reconstruction());
+  EXPECT_TRUE(triangulator.GetMergeLog().empty());
+}
+
+TEST(IncrementalTriangulator, MergeLogAfterMergeAllTracks) {
+  auto database = Database::Open(kInMemorySqliteDatabasePath);
+
+  Reconstruction reconstruction;
+  SyntheticDatasetOptions synthetic_options;
+  synthetic_options.num_rigs = 1;
+  synthetic_options.num_cameras_per_rig = 1;
+  synthetic_options.num_frames_per_rig = 10;
+  synthetic_options.num_points3D = 5;
+  SynthesizeDataset(synthetic_options, &reconstruction, database.get());
+
+  auto cache = DatabaseCache::Create(*database, DatabaseCache::Options());
+
+  auto points3D_it = reconstruction.Points3D().begin();
+  const point3D_t point3D_id1 = (points3D_it++)->first;
+  SplitPoint3D(reconstruction, point3D_id1);
+
+  IncrementalTriangulator triangulator(cache->CorrespondenceGraph(),
+                                       reconstruction);
+  triangulator.MergeAllTracks(IncrementalTriangulator::Options());
+
+  const auto& merge_log = triangulator.GetMergeLog();
+  EXPECT_GE(merge_log.size(), 1);
+  // All values (survivors), after resolving chains, must exist.
+  for (const auto& [key_id, survivor_id] : merge_log) {
+    point3D_t final_id = survivor_id;
+    int max_depth = 100;
+    while (merge_log.count(final_id) > 0 && --max_depth > 0) {
+      final_id = merge_log.at(final_id);
+    }
+    EXPECT_TRUE(reconstruction.ExistsPoint3D(final_id));
+  }
+}
+
+TEST(IncrementalTriangulator, ClearMergeLog) {
+  auto database = Database::Open(kInMemorySqliteDatabasePath);
+
+  Reconstruction reconstruction;
+  SyntheticDatasetOptions synthetic_options;
+  synthetic_options.num_rigs = 1;
+  synthetic_options.num_cameras_per_rig = 1;
+  synthetic_options.num_frames_per_rig = 10;
+  synthetic_options.num_points3D = 5;
+  SynthesizeDataset(synthetic_options, &reconstruction, database.get());
+
+  auto cache = DatabaseCache::Create(*database, DatabaseCache::Options());
+
+  auto points3D_it = reconstruction.Points3D().begin();
+  SplitPoint3D(reconstruction, (points3D_it++)->first);
+
+  IncrementalTriangulator triangulator(cache->CorrespondenceGraph(),
+                                       reconstruction);
+  triangulator.MergeAllTracks(IncrementalTriangulator::Options());
+  EXPECT_FALSE(triangulator.GetMergeLog().empty());
+
+  triangulator.ClearMergeLog();
+  EXPECT_TRUE(triangulator.GetMergeLog().empty());
+}
+
+TEST(IncrementalTriangulator, RetriangulateIgnoreAll) {
+  auto database = Database::Open(kInMemorySqliteDatabasePath);
+
+  Reconstruction reconstruction;
+  SyntheticDatasetOptions synthetic_options;
+  synthetic_options.num_rigs = 1;
+  synthetic_options.num_cameras_per_rig = 1;
+  synthetic_options.num_frames_per_rig = 5;
+  synthetic_options.num_points3D = 20;
+  SynthesizeDataset(synthetic_options, &reconstruction, database.get());
+
+  DeleteAllPoints3D(reconstruction);
+
+  auto cache = DatabaseCache::Create(*database, DatabaseCache::Options());
+  IncrementalTriangulator triangulator(cache->CorrespondenceGraph(),
+                                       reconstruction);
+
+  // Ignore all images — should produce zero triangulations
+  std::unordered_set<image_t> all_images;
+  for (const auto& [image_id, _] : reconstruction.Images()) {
+    all_images.insert(image_id);
+  }
+  const size_t num_tris = triangulator.Retriangulate(
+      IncrementalTriangulator::Options(), all_images);
+  EXPECT_EQ(num_tris, 0);
+  EXPECT_EQ(reconstruction.NumPoints3D(), 0);
+}
+
+TEST(IncrementalTriangulator, RetriangulateWithEmptyIgnoreSet) {
+  auto database = Database::Open(kInMemorySqliteDatabasePath);
+
+  Reconstruction reconstruction;
+  SyntheticDatasetOptions synthetic_options;
+  synthetic_options.num_rigs = 1;
+  synthetic_options.num_cameras_per_rig = 1;
+  synthetic_options.num_frames_per_rig = 5;
+  synthetic_options.num_points3D = 20;
+  SynthesizeDataset(synthetic_options, &reconstruction, database.get());
+
+  DeleteAllPoints3D(reconstruction);
+
+  auto cache = DatabaseCache::Create(*database, DatabaseCache::Options());
+  IncrementalTriangulator triangulator(cache->CorrespondenceGraph(),
+                                       reconstruction);
+
+  // Empty ignore set — should behave same as no ignore
+  const size_t num_tris = triangulator.Retriangulate(
+      IncrementalTriangulator::Options(), std::unordered_set<image_t>{});
+  EXPECT_EQ(num_tris,
+            synthetic_options.num_points3D * reconstruction.NumRegImages());
+  EXPECT_EQ(reconstruction.NumPoints3D(), synthetic_options.num_points3D);
+}
+
 }  // namespace
 }  // namespace colmap

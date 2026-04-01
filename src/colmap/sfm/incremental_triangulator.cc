@@ -303,7 +303,9 @@ size_t IncrementalTriangulator::MergeAllTracks(const Options& options) {
   return num_merged;
 }
 
-size_t IncrementalTriangulator::Retriangulate(const Options& options) {
+size_t IncrementalTriangulator::Retriangulate(
+    const Options& options,
+    std::optional<std::unordered_set<image_t>> ignore_image_ids) {
   THROW_CHECK(options.Check());
 
   size_t num_tris = 0;
@@ -326,6 +328,12 @@ size_t IncrementalTriangulator::Retriangulate(const Options& options) {
     // Check if images are registered yet.
 
     const auto [image_id1, image_id2] = PairIdToImagePair(image_pair.first);
+
+    if (ignore_image_ids &&
+        (ignore_image_ids->count(image_id1) > 0 ||
+         ignore_image_ids->count(image_id2) > 0)) {
+      continue;
+    }
 
     const Image& image1 = reconstruction_.Image(image_id1);
     if (!image1.HasPose()) {
@@ -425,6 +433,13 @@ IncrementalTriangulator::GetModifiedPoints3D() {
 void IncrementalTriangulator::ClearModifiedPoints3D() {
   modified_point3D_ids_.clear();
 }
+
+const std::unordered_map<point3D_t, point3D_t>&
+IncrementalTriangulator::GetMergeLog() const {
+  return merge_log_;
+}
+
+void IncrementalTriangulator::ClearMergeLog() { merge_log_.clear(); }
 
 void IncrementalTriangulator::ClearCaches() {
   camera_has_bogus_params_.clear();
@@ -654,6 +669,13 @@ size_t IncrementalTriangulator::Merge(const Options& options,
         modified_point3D_ids_.erase(point3D_id);
         modified_point3D_ids_.erase(corr_point2D.point3D_id);
         modified_point3D_ids_.insert(merged_point3D_id);
+
+        if (point3D_id != merged_point3D_id) {
+          merge_log_[point3D_id] = merged_point3D_id;
+        }
+        if (corr_point2D.point3D_id != merged_point3D_id) {
+          merge_log_[corr_point2D.point3D_id] = merged_point3D_id;
+        }
 
         // Merge merged 3D point and return, as the original points are
         // deleted.
