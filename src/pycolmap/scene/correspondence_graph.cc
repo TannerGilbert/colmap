@@ -1,6 +1,7 @@
 #include "colmap/scene/correspondence_graph.h"
 
 #include "colmap/feature/types.h"
+#include "colmap/scene/two_view_geometry.h"
 #include "colmap/util/types.h"
 
 #include "pycolmap/helpers.h"
@@ -144,4 +145,34 @@ void BindCorrespondenceGraph(py::module& m) {
   DefDeprecation(PyCorrespondenceGraph,
                  "find_correspondences_between_images",
                  "extract_matches_between_images");
+
+  m.def(
+      "build_correspondence_graph",
+      [](const std::vector<image_t>& image_ids,
+         const std::vector<size_t>& num_points2D,
+         const std::vector<image_t>& pair_ids1,
+         const std::vector<image_t>& pair_ids2,
+         const std::vector<TwoViewGeometry>& two_view_geometries)
+          -> std::shared_ptr<CorrespondenceGraph> {
+        THROW_CHECK_EQ(image_ids.size(), num_points2D.size());
+        THROW_CHECK_EQ(pair_ids1.size(), pair_ids2.size());
+        THROW_CHECK_EQ(pair_ids1.size(), two_view_geometries.size());
+        auto cg = std::make_shared<CorrespondenceGraph>();
+        for (size_t i = 0; i < image_ids.size(); ++i) {
+          cg->AddImage(image_ids[i], num_points2D[i]);
+        }
+        for (size_t i = 0; i < pair_ids1.size(); ++i) {
+          cg->AddTwoViewGeometry(
+              pair_ids1[i], pair_ids2[i], two_view_geometries[i]);
+        }
+        cg->Finalize();
+        return cg;
+      },
+      "image_ids"_a,
+      "num_points2D"_a,
+      "pair_ids1"_a,
+      "pair_ids2"_a,
+      "two_view_geometries"_a,
+      "Build a CorrespondenceGraph from image info and TwoViewGeometry "
+      "objects in a single call.");
 }

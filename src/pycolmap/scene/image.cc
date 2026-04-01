@@ -111,6 +111,13 @@ void BindSceneImage(py::module& m) {
            py::return_value_policy::reference_internal,
            "point2D_idx"_a,
            "Direct accessor for a point2D.")
+      .def("point2D_coords",
+           &Image::Point2DCoords,
+           "Get an Nx2 numpy array of xy coordinates for points2D.")
+      .def("point3D_ids",
+           &Image::Point3DIds,
+           "Get a list of 3D point IDs for all points2D. "
+           "Returns kInvalidPoint3DId for untriangulated points.")
       .def(
           "set_point3D_for_point2D",
           &Image::SetPoint3DForPoint2D,

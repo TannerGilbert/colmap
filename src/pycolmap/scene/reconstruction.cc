@@ -302,5 +302,72 @@ void BindReconstruction(py::module& m) {
            << "\n\tmean_reprojection_error = "
            << self.ComputeMeanReprojectionError();
         return ss.str();
-      });
+      })
+      .def("clone",
+           [](const Reconstruction& self) {
+             return std::make_shared<Reconstruction>(self);
+           },
+           "Create a deep copy of this reconstruction.")
+      .def("point3D_coords",
+           &Reconstruction::Point3DCoords,
+           "point3D_ids"_a,
+           "Retrieve an Nx3 matrix of 3D coordinates for the given point IDs.")
+      .def(
+          "delete_points3D",
+          [](Reconstruction& self,
+             const std::vector<point3D_t>& point3D_ids) {
+            for (const auto pid : point3D_ids) {
+              if (self.ExistsPoint3D(pid)) {
+                self.DeletePoint3D(pid);
+              }
+            }
+          },
+          "point3D_ids"_a,
+          "Delete multiple 3D points in a single call.")
+      .def(
+          "add_points3D",
+          [](Reconstruction& self,
+             const Eigen::MatrixXd& xyzs,
+             const std::vector<std::vector<std::pair<image_t, point2D_t>>>&
+                 track_elements) -> std::vector<point3D_t> {
+            THROW_CHECK_EQ(static_cast<size_t>(xyzs.rows()),
+                           track_elements.size());
+            std::vector<point3D_t> new_ids;
+            new_ids.reserve(track_elements.size());
+            for (size_t i = 0; i < track_elements.size(); ++i) {
+              Track track;
+              track.SetElements({});
+              for (const auto& [image_id, point2D_idx] : track_elements[i]) {
+                track.AddElement(image_id, point2D_idx);
+              }
+              if (track.Length() >= 2) {
+                new_ids.push_back(
+                    self.AddPoint3D(xyzs.row(i).transpose(), std::move(track)));
+              } else {
+                new_ids.push_back(-1);
+              }
+            }
+            return new_ids;
+          },
+          "xyzs"_a,
+          "track_elements"_a,
+          "Add multiple 3D points. xyzs is Nx3, track_elements is list of "
+          "list of (image_id, point2D_idx) pairs. Returns list of new IDs "
+          "(-1 if track had <2 elements).")
+      .def(
+          "get_occupied_set",
+          [](const Reconstruction& self)
+              -> std::vector<std::pair<image_t, point2D_t>> {
+            std::vector<std::pair<image_t, point2D_t>> result;
+            for (const auto& [image_id, image] : self.Images()) {
+              for (point2D_t idx = 0; idx < image.NumPoints2D(); ++idx) {
+                if (image.Point2D(idx).HasPoint3D()) {
+                  result.emplace_back(image_id, idx);
+                }
+              }
+            }
+            return result;
+          },
+          "Return list of (image_id, point2D_idx) for all point2Ds that "
+          "have an associated 3D point.");
 }

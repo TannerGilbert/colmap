@@ -175,6 +175,10 @@ class Reconstruction {
   // Delete all 2D points of all images and all 3D points.
   void DeleteAllPoints2DAndPoints3D();
 
+  // Return the 3D coordinates of the given point IDs.
+  Eigen::MatrixXd Point3DCoords(
+      const std::vector<point3D_t>& point3D_ids) const;
+
   // Replace all rigs and frames with the given vectors, updating image links.
   void SetRigsAndFrames(std::vector<class Rig> rigs,
                         std::vector<class Frame> frames);

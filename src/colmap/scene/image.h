@@ -120,6 +120,12 @@ class Image {
   void SetPoints2D(const std::vector<Eigen::Vector2d>& points);
   void SetPoints2D(const std::vector<struct Point2D>& points);
 
+  // Return point3D IDs for all points2D (kInvalidPoint3DId for untriangulated).
+  std::vector<point3D_t> Point3DIds() const;
+
+  // Return Nx2 matrix of xy coordinates for all points2D.
+  Eigen::MatrixXd Point2DCoords() const;
+
   // Set the point as triangulated, i.e. it is part of a 3D point track.
   void SetPoint3DForPoint2D(point2D_t point2D_idx, point3D_t point3D_id);
 

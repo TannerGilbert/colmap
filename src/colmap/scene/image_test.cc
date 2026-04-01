@@ -362,5 +362,40 @@ TEST(Image, ProjectPoint) {
   EXPECT_FALSE(image.ProjectPoint(Eigen::Vector3d(2, 0, -1)).has_value());
 }
 
+TEST(Image, Point3DIds) {
+  Image image;
+  image.SetPoints2D(std::vector<Eigen::Vector2d>(4, Eigen::Vector2d::Zero()));
+  image.SetPoint3DForPoint2D(0, 42);
+  image.SetPoint3DForPoint2D(2, 99);
+
+  std::vector<point3D_t> ids = image.Point3DIds();
+  EXPECT_EQ(ids.size(), 4);
+  EXPECT_EQ(ids[0], 42);
+  EXPECT_EQ(ids[1], kInvalidPoint3DId);
+  EXPECT_EQ(ids[2], 99);
+  EXPECT_EQ(ids[3], kInvalidPoint3DId);
+}
+
+TEST(Image, Point3DIdsEmpty) {
+  Image image;
+  std::vector<point3D_t> ids = image.Point3DIds();
+  EXPECT_TRUE(ids.empty());
+}
+
+TEST(Image, Point2DCoords) {
+  Image image;
+  std::vector<Eigen::Vector2d> pts = {
+      {1.5, 2.5}, {3.0, 4.0}, {5.5, 6.5}};
+  image.SetPoints2D(pts);
+
+  Eigen::MatrixXd coords = image.Point2DCoords();
+  EXPECT_EQ(coords.rows(), 3);
+  EXPECT_EQ(coords.cols(), 2);
+  EXPECT_DOUBLE_EQ(coords(0, 0), 1.5);
+  EXPECT_DOUBLE_EQ(coords(0, 1), 2.5);
+  EXPECT_DOUBLE_EQ(coords(2, 0), 5.5);
+  EXPECT_DOUBLE_EQ(coords(2, 1), 6.5);
+}
+
 }  // namespace
 }  // namespace colmap

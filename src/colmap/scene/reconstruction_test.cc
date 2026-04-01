@@ -1423,5 +1423,36 @@ TEST(Reconstruction, ExtractColorsForAllImages) {
   }
 }
 
+TEST(Reconstruction, Point3DCoords) {
+  Reconstruction reconstruction;
+  GenerateReconstruction(2, &reconstruction);
+
+  Track track1;
+  track1.AddElement(1, 0);
+  track1.AddElement(2, 0);
+  point3D_t pid1 =
+      reconstruction.AddPoint3D(Eigen::Vector3d(1.0, 2.0, 3.0), track1);
+
+  Track track2;
+  track2.AddElement(1, 1);
+  track2.AddElement(2, 1);
+  point3D_t pid2 =
+      reconstruction.AddPoint3D(Eigen::Vector3d(4.0, 5.0, 6.0), track2);
+
+  Eigen::MatrixXd coords = reconstruction.Point3DCoords({pid1, pid2});
+  EXPECT_EQ(coords.rows(), 2);
+  EXPECT_EQ(coords.cols(), 3);
+  EXPECT_DOUBLE_EQ(coords(0, 0), 1.0);
+  EXPECT_DOUBLE_EQ(coords(0, 1), 2.0);
+  EXPECT_DOUBLE_EQ(coords(0, 2), 3.0);
+  EXPECT_DOUBLE_EQ(coords(1, 0), 4.0);
+}
+
+TEST(Reconstruction, Point3DCoordsThrowsOnInvalidId) {
+  Reconstruction reconstruction;
+  GenerateReconstruction(1, &reconstruction);
+  EXPECT_ANY_THROW(reconstruction.Point3DCoords({999}));
+}
+
 }  // namespace
 }  // namespace colmap
