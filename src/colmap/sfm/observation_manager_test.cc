@@ -711,5 +711,87 @@ TEST(ObservationManager, AddImage) {
   obs_manager.AddPoint3D(Eigen::Vector3d(1, 0, 1), track2);
 }
 
+// Helper: build reconstruction with 2 images at different poses,
+// one narrow-angle point and one wide-angle point.
+struct TriAngleTestData {
+  Reconstruction reconstruction;
+  std::unique_ptr<ObservationManager> obs_manager;
+  point3D_t narrow_pid;
+  point3D_t wide_pid;
+};
+
+TriAngleTestData MakeTriAngleTestReconstruction() {
+  TriAngleTestData d;
+  GenerateReconstruction(2, d.reconstruction);
+
+  // Image 1 at origin, image 2 translated along X by 1.0
+  d.reconstruction.Frame(1).SetRigFromWorld(Rigid3d());
+  d.reconstruction.Frame(2).SetRigFromWorld(
+      Rigid3d(Eigen::Quaterniond::Identity(), Eigen::Vector3d(-1, 0, 0)));
+
+  // Register frames
+  d.reconstruction.RegisterFrame(1);
+  d.reconstruction.RegisterFrame(2);
+
+  d.obs_manager =
+      std::make_unique<ObservationManager>(d.reconstruction);
+
+  // Narrow angle: point far away -> tiny angle
+  Track narrow_track;
+  narrow_track.AddElement(1, 0);
+  narrow_track.AddElement(2, 0);
+  d.narrow_pid =
+      d.obs_manager->AddPoint3D(Eigen::Vector3d(0, 0, 1000), narrow_track);
+
+  // Wide angle: point close and to the side -> large angle
+  Track wide_track;
+  wide_track.AddElement(1, 1);
+  wide_track.AddElement(2, 1);
+  d.wide_pid =
+      d.obs_manager->AddPoint3D(Eigen::Vector3d(0.5, 0, 1), wide_track);
+
+  return d;
+}
+
+TEST(ObservationManager, FindSmallTriAngleReturnsNarrow) {
+  auto d = MakeTriAngleTestReconstruction();
+  std::vector<point3D_t> all_ids = {d.narrow_pid, d.wide_pid};
+  std::vector<point3D_t> result =
+      d.obs_manager->FindPoints3DWithSmallTriangulationAngle(1.0, all_ids);
+  EXPECT_EQ(result.size(), 1);
+  EXPECT_EQ(result[0], d.narrow_pid);
+}
+
+TEST(ObservationManager, FindSmallTriAngleEmptyForWellTriangulated) {
+  auto d = MakeTriAngleTestReconstruction();
+  std::vector<point3D_t> wide_only = {d.wide_pid};
+  std::vector<point3D_t> result =
+      d.obs_manager->FindPoints3DWithSmallTriangulationAngle(1.0, wide_only);
+  EXPECT_TRUE(result.empty());
+}
+
+TEST(ObservationManager, FilterSmallTriAngleDeletesSameAsFind) {
+  auto d = MakeTriAngleTestReconstruction();
+  std::vector<point3D_t> all_ids = {d.narrow_pid, d.wide_pid};
+  std::vector<point3D_t> found =
+      d.obs_manager->FindPoints3DWithSmallTriangulationAngle(1.0, all_ids);
+  ASSERT_EQ(found.size(), 1);
+
+  std::unordered_set<point3D_t> all_set(all_ids.begin(), all_ids.end());
+  size_t num_filtered =
+      d.obs_manager->FilterPoints3DWithSmallTriangulationAngle(1.0, all_set);
+  EXPECT_GT(num_filtered, 0);
+  EXPECT_FALSE(d.reconstruction.ExistsPoint3D(d.narrow_pid));
+  EXPECT_TRUE(d.reconstruction.ExistsPoint3D(d.wide_pid));
+}
+
+TEST(ObservationManager, FindSmallTriAngleNonDestructive) {
+  auto d = MakeTriAngleTestReconstruction();
+  size_t num_before = d.reconstruction.NumPoints3D();
+  std::vector<point3D_t> all_ids = {d.narrow_pid, d.wide_pid};
+  d.obs_manager->FindPoints3DWithSmallTriangulationAngle(1.0, all_ids);
+  EXPECT_EQ(d.reconstruction.NumPoints3D(), num_before);
+}
+
 }  // namespace
 }  // namespace colmap

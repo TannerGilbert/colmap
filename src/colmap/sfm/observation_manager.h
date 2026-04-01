@@ -125,6 +125,12 @@ class ObservationManager {
   size_t FilterPoints3DWithSmallTriangulationAngle(
       double min_tri_angle, const std::unordered_set<point3D_t>& point3D_ids);
 
+  // Return point3D IDs with triangulation angle below the threshold
+  // (non-destructive query — does not delete anything).
+  std::vector<point3D_t> FindPoints3DWithSmallTriangulationAngle(
+      double min_tri_angle,
+      const std::vector<point3D_t>& point3D_ids);
+
   // Filter observations with large reprojection error.
   //
   // @param max_error       Maximum error threshold. For PIXEL and NORMALIZED,

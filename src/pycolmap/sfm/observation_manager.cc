@@ -7,6 +7,7 @@
 
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 using namespace colmap;
 using namespace pybind11::literals;
@@ -149,5 +150,11 @@ void BindObservationManager(py::module& m) {
            "any more and has a correspondence to this image point. This assumes"
            "that `IncrementCorrespondenceHasPoint3D` was called for the same"
            "image point and correspondence before.")
-      .def("__repr__", &CreateRepresentation<ObservationManager>);
+      .def("__repr__", &CreateRepresentation<ObservationManager>)
+      .def("find_points3D_with_small_triangulation_angle",
+           &ObservationManager::FindPoints3DWithSmallTriangulationAngle,
+           "min_tri_angle"_a,
+           "point3D_ids"_a,
+           "Return point3D IDs with triangulation angle below the threshold "
+           "(non-destructive).");
 }
