@@ -146,6 +146,11 @@ class Image {
   std::optional<Eigen::Vector2d> ProjectPoint(
       const Eigen::Vector3d& point3D) const;
 
+  // Pixel covariance accessors for Mahalanobis-weighted bundle adjustment.
+  inline const std::vector<Eigen::Vector3d>& PixelCholeskyXY() const;
+  inline void SetPixelCholeskyXY(const std::vector<Eigen::Vector3d>& values);
+  inline bool HasPixelCovariances() const;
+
   inline bool operator==(const Image& other) const;
   inline bool operator!=(const Image& other) const;
 
@@ -161,6 +166,9 @@ class Image {
 
   // All image points, including points that are not part of a 3D point track.
   std::vector<struct Point2D> points2D_;
+
+  // Per-observation Cholesky factors (L00, L10, L11) for Mahalanobis weighting.
+  std::vector<Eigen::Vector3d> pixel_cholesky_xy_;
 
   // Identifier of the image, if not specified `kInvalidImageId`.
   image_t image_id_;
@@ -312,5 +320,18 @@ bool Image::operator==(const Image& other) const {
 }
 
 bool Image::operator!=(const Image& other) const { return !(*this == other); }
+
+const std::vector<Eigen::Vector3d>& Image::PixelCholeskyXY() const {
+  return pixel_cholesky_xy_;
+}
+
+void Image::SetPixelCholeskyXY(const std::vector<Eigen::Vector3d>& values) {
+  pixel_cholesky_xy_ = values;
+}
+
+bool Image::HasPixelCovariances() const {
+  return !pixel_cholesky_xy_.empty() &&
+         pixel_cholesky_xy_.size() == points2D_.size();
+}
 
 }  // namespace colmap

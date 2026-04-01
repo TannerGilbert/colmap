@@ -397,5 +397,31 @@ TEST(Image, Point2DCoords) {
   EXPECT_DOUBLE_EQ(coords(2, 1), 6.5);
 }
 
+TEST(Image, PixelCholeskyXYRoundtrip) {
+  Image image;
+  image.SetPoints2D(std::vector<Eigen::Vector2d>(3, Eigen::Vector2d::Zero()));
+  std::vector<Eigen::Vector3d> chol = {
+      {1.0, 0.0, 1.0}, {2.0, 0.5, 3.0}, {1.0, -0.1, 0.8}};
+  image.SetPixelCholeskyXY(chol);
+  EXPECT_TRUE(image.HasPixelCovariances());
+  EXPECT_EQ(image.PixelCholeskyXY().size(), 3);
+  EXPECT_DOUBLE_EQ(image.PixelCholeskyXY()[1][0], 2.0);
+  EXPECT_DOUBLE_EQ(image.PixelCholeskyXY()[1][1], 0.5);
+  EXPECT_DOUBLE_EQ(image.PixelCholeskyXY()[1][2], 3.0);
+}
+
+TEST(Image, HasPixelCovariancesFalseWhenEmpty) {
+  Image image;
+  image.SetPoints2D(std::vector<Eigen::Vector2d>(3, Eigen::Vector2d::Zero()));
+  EXPECT_FALSE(image.HasPixelCovariances());
+}
+
+TEST(Image, HasPixelCovariancesFalseOnSizeMismatch) {
+  Image image;
+  image.SetPoints2D(std::vector<Eigen::Vector2d>(3, Eigen::Vector2d::Zero()));
+  image.SetPixelCholeskyXY({{1, 0, 1}, {2, 0, 2}});
+  EXPECT_FALSE(image.HasPixelCovariances());
+}
+
 }  // namespace
 }  // namespace colmap

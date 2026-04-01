@@ -194,6 +194,10 @@ struct BundleAdjustmentOptions : public BundleAdjustmentBackendOptions {
   // When true, only translation is refined.
   bool constant_rig_from_world_rotation = false;
 
+  // Use per-keypoint pixel covariances for Mahalanobis weighting.
+  // Requires Image::pixel_cholesky_xy_ to be populated.
+  bool use_keypoint_covariances = false;
+
   // Whether to print a final summary.
   bool print_summary = true;
 

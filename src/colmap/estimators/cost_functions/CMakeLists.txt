@@ -42,6 +42,7 @@ COLMAP_ADD_LIBRARY(
         reprojection_error.h
         sampson_error.h
         utils.h
+        weighted_reprojection_error.h
     INTERFACE_LINK_LIBS
         colmap_geometry
         colmap_sensor

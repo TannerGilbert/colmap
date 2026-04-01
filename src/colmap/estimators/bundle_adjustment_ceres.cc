@@ -32,6 +32,7 @@
 #include "colmap/estimators/alignment.h"
 #include "colmap/estimators/cost_functions/depth_prior.h"
 #include "colmap/estimators/cost_functions/manifold.h"
+#include "colmap/estimators/cost_functions/weighted_reprojection_error.h"
 #include "colmap/estimators/cost_functions/pose_prior.h"
 #include "colmap/estimators/cost_functions/reprojection_error.h"
 #include "colmap/estimators/cost_functions/utils.h"
@@ -116,7 +117,13 @@ CeresBundleAdjustmentOptions::CeresBundleAdjustmentOptions() {
 
 std::unique_ptr<ceres::LossFunction>
 CeresBundleAdjustmentOptions::CreateLossFunction() const {
-  return colmap::CreateLossFunction(loss_function_type, loss_function_scale);
+  auto loss = colmap::CreateLossFunction(loss_function_type, loss_function_scale);
+  if (loss_function_weight != 1.0) {
+    THROW_CHECK_GT(loss_function_weight, 0);
+    loss.reset(new ceres::ScaledLoss(
+        loss.release(), loss_function_weight, ceres::TAKE_OWNERSHIP));
+  }
+  return loss;
 }
 
 ceres::Solver::Options CeresBundleAdjustmentOptions::CreateSolverOptions(
@@ -688,9 +695,13 @@ class DefaultBundleAdjuster : public CeresBundleAdjuster {
     Rigid3d& rig_from_world = image.FramePtr()->RigFromWorld();
 
     // Add residuals to bundle adjustment problem.
+    const bool use_covariances = options_.use_keypoint_covariances &&
+                                 image.HasPixelCovariances();
     size_t num_observations = 0;
+    point2D_t point2D_idx = 0;
     for (const Point2D& point2D : image.Points2D()) {
       if (!point2D.HasPoint3D() || config_.IsIgnoredPoint(point2D.point3D_id)) {
+        ++point2D_idx;
         continue;
       }
 
@@ -701,28 +712,63 @@ class DefaultBundleAdjuster : public CeresBundleAdjuster {
       if (options_.min_track_length > 0 &&
           static_cast<int>(point3D.track.Length()) <
               options_.min_track_length) {
+        ++point2D_idx;
         continue;
       }
 
       num_observations += 1;
       point3D_num_observations_[point2D.point3D_id] += 1;
 
-      if (constant_cam_from_world) {
-        problem_->AddResidualBlock(
-            CreateCameraCostFunction<ReprojErrorConstantPoseCostFunctor>(
-                camera.model_id, point2D.xy, rig_from_world),
-            loss_function_.get(),
-            point3D.xyz.data(),
-            camera.params.data());
+      const bool use_weighted = use_covariances &&
+                                point2D_idx < image.PixelCholeskyXY().size();
+
+      if (use_weighted) {
+        const Eigen::Vector3d& chol = image.PixelCholeskyXY()[point2D_idx];
+        if (constant_cam_from_world) {
+          problem_->AddResidualBlock(
+              CreateCameraCostFunction<
+                  WeightedReprojErrorConstantPoseCostFunctor>(
+                  camera.model_id,
+                  point2D.xy,
+                  rig_from_world,
+                  chol[0],
+                  chol[1],
+                  chol[2]),
+              loss_function_.get(),
+              point3D.xyz.data(),
+              camera.params.data());
+        } else {
+          problem_->AddResidualBlock(
+              CreateCameraCostFunction<WeightedReprojErrorCostFunctor>(
+                  camera.model_id,
+                  point2D.xy,
+                  chol[0],
+                  chol[1],
+                  chol[2]),
+              loss_function_.get(),
+              point3D.xyz.data(),
+              rig_from_world.params.data(),
+              camera.params.data());
+        }
       } else {
-        problem_->AddResidualBlock(
-            CreateCameraCostFunction<ReprojErrorCostFunctor>(camera.model_id,
-                                                             point2D.xy),
-            loss_function_.get(),
-            point3D.xyz.data(),
-            rig_from_world.params.data(),
-            camera.params.data());
+        if (constant_cam_from_world) {
+          problem_->AddResidualBlock(
+              CreateCameraCostFunction<ReprojErrorConstantPoseCostFunctor>(
+                  camera.model_id, point2D.xy, rig_from_world),
+              loss_function_.get(),
+              point3D.xyz.data(),
+              camera.params.data());
+        } else {
+          problem_->AddResidualBlock(
+              CreateCameraCostFunction<ReprojErrorCostFunctor>(
+                  camera.model_id, point2D.xy),
+              loss_function_.get(),
+              point3D.xyz.data(),
+              rig_from_world.params.data(),
+              camera.params.data());
+        }
       }
+      ++point2D_idx;
     }
 
     if (num_observations > 0) {
