@@ -30,6 +30,7 @@
 #include "colmap/estimators/bundle_adjustment_ceres.h"
 
 #include "colmap/estimators/alignment.h"
+#include "colmap/estimators/cost_functions/depth_prior.h"
 #include "colmap/estimators/cost_functions/manifold.h"
 #include "colmap/estimators/cost_functions/pose_prior.h"
 #include "colmap/estimators/cost_functions/reprojection_error.h"
@@ -1135,6 +1136,54 @@ void PrintSolverSummary(const ceres::Solver::Summary& summary,
   log << std::right << ceres::TerminationTypeToString(summary.termination_type)
       << "\n\n";
   LOG(INFO) << log.str();
+}
+
+void DepthPriorBundleAdjuster(
+    ceres::Problem* problem,
+    image_t image_id,
+    const std::vector<point3D_t>& point3D_ids,
+    const std::vector<double>& depths,
+    const std::vector<double>& loss_magnitudes,
+    const std::vector<double>& loss_params,
+    const std::vector<CeresBundleAdjustmentOptions::LossFunctionType>&
+        loss_types,
+    double* shift_scale_ptr,
+    Reconstruction& reconstruction,
+    bool logloss,
+    bool fix_shift,
+    bool fix_scale) {
+  THROW_CHECK_EQ(point3D_ids.size(), depths.size());
+  THROW_CHECK_EQ(point3D_ids.size(), loss_magnitudes.size());
+  THROW_CHECK_EQ(point3D_ids.size(), loss_params.size());
+  THROW_CHECK_EQ(point3D_ids.size(), loss_types.size());
+
+  Image& image = reconstruction.Image(image_id);
+  double* pose_params = image.FramePtr()->RigFromWorld().params.data();
+
+  for (size_t i = 0; i < point3D_ids.size(); ++i) {
+    Point3D& point3D = reconstruction.Point3D(point3D_ids[i]);
+
+    ceres::CostFunction* cost_function =
+        logloss ? LogScaledDepthErrorCostFunctor::Create(depths[i])
+                : ScaledDepthErrorCostFunctor::Create(depths[i]);
+
+    CeresBundleAdjustmentOptions loss_opts;
+    loss_opts.loss_function_type = loss_types[i];
+    loss_opts.loss_function_scale = loss_params[i];
+    std::unique_ptr<ceres::LossFunction> loss_function =
+        loss_opts.CreateLossFunction();
+
+    ceres::LossFunction* final_loss = loss_function.release();
+    if (loss_magnitudes[i] != 1.0) {
+      THROW_CHECK_GT(loss_magnitudes[i], 0);
+      final_loss = new ceres::ScaledLoss(
+          final_loss, loss_magnitudes[i], ceres::TAKE_OWNERSHIP);
+    }
+
+    problem->AddResidualBlock(
+        cost_function, final_loss, pose_params, point3D.xyz.data(),
+        shift_scale_ptr);
+  }
 }
 
 }  // namespace colmap

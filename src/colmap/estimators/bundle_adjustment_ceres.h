@@ -135,4 +135,20 @@ std::unique_ptr<BundleAdjuster> CreatePosePriorCeresBundleAdjuster(
 void PrintSolverSummary(const ceres::Solver::Summary& summary,
                         const std::string& header);
 
+// Adds depth prior residual blocks to an existing ceres::Problem.
+void DepthPriorBundleAdjuster(
+    ceres::Problem* problem,
+    image_t image_id,
+    const std::vector<point3D_t>& point3D_ids,
+    const std::vector<double>& depths,
+    const std::vector<double>& loss_magnitudes,
+    const std::vector<double>& loss_params,
+    const std::vector<CeresBundleAdjustmentOptions::LossFunctionType>&
+        loss_types,
+    double* shift_scale_ptr,
+    Reconstruction& reconstruction,
+    bool logloss = false,
+    bool fix_shift = false,
+    bool fix_scale = false);
+
 }  // namespace colmap

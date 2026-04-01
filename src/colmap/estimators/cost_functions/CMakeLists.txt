@@ -35,6 +35,7 @@ COLMAP_ADD_LIBRARY(
     SRCS
         alignment.h
         calibration.h
+        depth_prior.h
         manifold.h
         motion_averaging.h
         pose_prior.h
@@ -81,5 +82,10 @@ COLMAP_ADD_TEST(
 COLMAP_ADD_TEST(
     NAME motion_averaging_test
     SRCS motion_averaging_test.cc
+    LINK_LIBS colmap_estimators_cost_functions
+)
+COLMAP_ADD_TEST(
+    NAME depth_prior_test
+    SRCS depth_prior_test.cc
     LINK_LIBS colmap_estimators_cost_functions
 )

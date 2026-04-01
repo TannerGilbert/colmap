@@ -179,4 +179,27 @@ struct RelativePosePriorCostFunctor
   const Rigid3d j_from_i_prior_;
 };
 
+// 1-DoF height prior: constrains one axis of camera world position.
+// Residual: inv_sigma * (world_position[axis] - target_height)
+// Params: cam_from_world[7]
+struct HeightPriorCostFunctor
+    : public AutoDiffCostFunctor<HeightPriorCostFunctor, 1, 7> {
+  HeightPriorCostFunctor(double inv_sigma, double target_height, int axis = 1)
+      : inv_sigma_(inv_sigma), target_height_(target_height), axis_(axis) {}
+
+  template <typename T>
+  bool operator()(const T* const cam_from_world, T* residuals) const {
+    const Eigen::Matrix<T, 3, 1> rotated_t =
+        EigenQuaternionMap<T>(cam_from_world).inverse() *
+        EigenVector3Map<T>(cam_from_world + 4);
+    residuals[0] = T(inv_sigma_) * (-rotated_t[axis_] - T(target_height_));
+    return true;
+  }
+
+ private:
+  const double inv_sigma_;
+  const double target_height_;
+  const int axis_;
+};
+
 }  // namespace colmap
