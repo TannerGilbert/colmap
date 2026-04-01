@@ -118,6 +118,17 @@ void BindSceneImage(py::module& m) {
            &Image::Point3DIds,
            "Get a list of 3D point IDs for all points2D. "
            "Returns kInvalidPoint3DId for untriangulated points.")
+      .def_property(
+          "pixel_cholesky_xy",
+          [](const Image& self) { return self.PixelCholeskyXY(); },
+          [](Image& self, const std::vector<Eigen::Vector3d>& v) {
+            self.SetPixelCholeskyXY(v);
+          },
+          "Per-observation Cholesky factors (L00, L10, L11) for pixel "
+          "covariance weighting.")
+      .def("has_pixel_covariances",
+           &Image::HasPixelCovariances,
+           "Check if pixel covariances are set and match points2D count.")
       .def(
           "set_point3D_for_point2D",
           &Image::SetPoint3DForPoint2D,

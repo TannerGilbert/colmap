@@ -1,4 +1,5 @@
 #include "colmap/estimators/cost_functions/alignment.h"
+#include "colmap/estimators/cost_functions/depth_prior.h"
 #include "colmap/estimators/cost_functions/pose_prior.h"
 #include "colmap/estimators/cost_functions/reprojection_error.h"
 #include "colmap/estimators/cost_functions/sampson_error.h"
@@ -189,4 +190,25 @@ void BindCostFunctions(py::module& m_parent) {
         "use_log_scale"_a = true,
         "Error between 3D points transformed by a 3D similarity transform. "
         "with prior covariance");
+
+  m.def("ScaledDepthErrorCost",
+        &ScaledDepthErrorCostFunctor::Create<double>,
+        "depth"_a,
+        "Depth prior: cam_z(point) - shift - depth*exp(scale)");
+  m.def("ScaledDepthErrorCost",
+        &ScaledDepthErrorConstantPoseCostFunctor::Create<const Rigid3d&,
+                                                         double>,
+        "cam_from_world"_a,
+        "depth"_a,
+        "Depth prior with constant pose");
+  m.def("LogScaledDepthErrorCost",
+        &LogScaledDepthErrorCostFunctor::Create<double>,
+        "depth"_a,
+        "Log-space depth prior");
+  m.def("HeightPriorCost",
+        &HeightPriorCostFunctor::Create<double, double, int>,
+        "inv_sigma"_a,
+        "target_height"_a,
+        "axis"_a = 1,
+        "Height prior on camera world position");
 }

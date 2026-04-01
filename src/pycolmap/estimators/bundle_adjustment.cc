@@ -7,6 +7,7 @@
 #include "pycolmap/utils.h"
 
 #include <pybind11/eigen.h>
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -194,6 +195,10 @@ void BindBundleAdjuster(py::module& m) {
                          &CeresBAOpts::loss_function_scale,
                          "Scaling factor determines residual at which "
                          "robustification takes place.")
+          .def_readwrite("loss_function_weight",
+                         &CeresBAOpts::loss_function_weight,
+                         "Multiplicative weight for loss function "
+                         "(wraps via ScaledLoss).")
           .def_readwrite("use_gpu",
                          &CeresBAOpts::use_gpu,
                          "Whether to use Ceres' CUDA linear algebra library, "
@@ -273,6 +278,10 @@ void BindBundleAdjuster(py::module& m) {
           .def_readwrite("min_track_length",
                          &BAOpts::min_track_length,
                          "Minimum track length for a 3D point.")
+          .def_readwrite("use_keypoint_covariances",
+                         &BAOpts::use_keypoint_covariances,
+                         "Use per-keypoint covariance weighting in "
+                         "reprojection errors.")
           .def_readwrite("print_summary",
                          &BAOpts::print_summary,
                          "Whether to print a final summary.")
@@ -368,4 +377,49 @@ void BindBundleAdjuster(py::module& m) {
         "config"_a,
         "pose_priors"_a,
         "reconstruction"_a);
+
+  m.def("create_depth_bundle_adjuster",
+        [](ceres::Problem* problem,
+           image_t image_id,
+           const std::vector<point3D_t>& point3D_ids,
+           const std::vector<double>& depths,
+           const std::vector<double>& loss_magnitudes,
+           const std::vector<double>& loss_params,
+           const std::vector<CeresBundleAdjustmentOptions::LossFunctionType>&
+               loss_types,
+           py::array_t<double> shift_scale,
+           Reconstruction& reconstruction,
+           bool logloss,
+           bool fix_shift,
+           bool fix_scale) {
+          auto buf = shift_scale.request();
+          if (buf.ndim != 1 || buf.shape[0] != 2)
+            throw std::runtime_error(
+                "shift_scale must have exactly 2 elements.");
+          double* shift_scale_ptr = static_cast<double*>(buf.ptr);
+          DepthPriorBundleAdjuster(problem,
+                                   image_id,
+                                   point3D_ids,
+                                   depths,
+                                   loss_magnitudes,
+                                   loss_params,
+                                   loss_types,
+                                   shift_scale_ptr,
+                                   reconstruction,
+                                   logloss,
+                                   fix_shift,
+                                   fix_scale);
+        },
+        "problem"_a,
+        "image_id"_a,
+        "point3D_ids"_a,
+        "depths"_a,
+        "loss_magnitudes"_a,
+        "loss_params"_a,
+        "loss_types"_a,
+        "shift_scale"_a,
+        "reconstruction"_a,
+        "logloss"_a = false,
+        "fix_shift"_a = false,
+        "fix_scale"_a = false);
 }
