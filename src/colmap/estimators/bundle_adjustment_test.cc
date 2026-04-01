@@ -422,5 +422,137 @@ INSTANTIATE_TEST_SUITE_P(PosePriorBundleAdjusterBackends,
                          PosePriorBundleAdjusterBackendTest,
                          ::testing::Values(BundleAdjustmentBackend::CERES));
 
+TEST(CovarianceBA, RunsWithoutCrash) {
+  SetPRNGSeed(0);
+  Reconstruction reconstruction;
+  SyntheticDatasetOptions synthetic_dataset_options;
+  synthetic_dataset_options.num_rigs = 1;
+  synthetic_dataset_options.num_cameras_per_rig = 1;
+  synthetic_dataset_options.num_frames_per_rig = 5;
+  synthetic_dataset_options.num_points3D = 50;
+  SynthesizeDataset(synthetic_dataset_options, &reconstruction);
+
+  // Set identity Cholesky on all images (equivalent to unweighted)
+  for (const auto& [img_id, img] : reconstruction.Images()) {
+    std::vector<Eigen::Vector3d> chol(
+        img.NumPoints2D(), Eigen::Vector3d(1.0, 0.0, 1.0));
+    reconstruction.Image(img_id).SetPixelCholeskyXY(chol);
+  }
+
+  BundleAdjustmentConfig config;
+  for (const image_t image_id : reconstruction.RegImageIds()) {
+    config.AddImage(image_id);
+  }
+  config.FixGauge(BundleAdjustmentGauge::TWO_CAMS_FROM_WORLD);
+
+  BundleAdjustmentOptions options;
+  options.use_keypoint_covariances = true;
+
+  std::unique_ptr<BundleAdjuster> ba =
+      CreateDefaultBundleAdjuster(options, config, reconstruction);
+  const auto summary = ba->Solve();
+  EXPECT_TRUE(summary->IsSolutionUsable());
+  EXPECT_GT(summary->num_residuals, 0);
+}
+
+TEST(CovarianceBA, IgnoredWhenDisabled) {
+  SetPRNGSeed(0);
+  Reconstruction reconstruction;
+  SyntheticDatasetOptions opts;
+  opts.num_rigs = 1;
+  opts.num_cameras_per_rig = 1;
+  opts.num_frames_per_rig = 5;
+  opts.num_points3D = 50;
+  SynthesizeDataset(opts, &reconstruction);
+
+  // Set non-identity Cholesky that would change results
+  for (const auto& [img_id, img] : reconstruction.Images()) {
+    std::vector<Eigen::Vector3d> chol(
+        img.NumPoints2D(), Eigen::Vector3d(2.0, 0.5, 3.0));
+    reconstruction.Image(img_id).SetPixelCholeskyXY(chol);
+  }
+
+  // Run BA WITHOUT covariance weighting
+  Reconstruction rec_no_cov = reconstruction;
+  BundleAdjustmentConfig config;
+  for (const image_t image_id : reconstruction.RegImageIds()) {
+    config.AddImage(image_id);
+  }
+  config.FixGauge(BundleAdjustmentGauge::TWO_CAMS_FROM_WORLD);
+
+  BundleAdjustmentOptions options;
+  options.use_keypoint_covariances = false;
+
+  auto ba = CreateDefaultBundleAdjuster(options, config, rec_no_cov);
+  const auto summary = ba->Solve();
+  EXPECT_TRUE(summary->IsSolutionUsable());
+}
+
+TEST(DepthPriorBA, ConvergesOnSyntheticData) {
+  SetPRNGSeed(0);
+  Reconstruction reconstruction;
+  SyntheticDatasetOptions opts;
+  opts.num_rigs = 1;
+  opts.num_cameras_per_rig = 1;
+  opts.num_frames_per_rig = 3;
+  opts.num_points3D = 20;
+  SynthesizeDataset(opts, &reconstruction);
+
+  // Pick the first registered image
+  const image_t image_id = *reconstruction.RegImageIds().begin();
+  Image& image = reconstruction.Image(image_id);
+
+  // Collect triangulated points and their true depths
+  std::vector<point3D_t> point3D_ids;
+  std::vector<double> depths;
+  for (point2D_t idx = 0; idx < image.NumPoints2D(); ++idx) {
+    if (!image.Point2D(idx).HasPoint3D()) continue;
+    point3D_t pid = image.Point2D(idx).point3D_id;
+    const Point3D& p3d = reconstruction.Point3D(pid);
+    Eigen::Vector3d p_cam = image.CamFromWorld() * p3d.xyz;
+    if (p_cam.z() <= 0) continue;
+    point3D_ids.push_back(pid);
+    depths.push_back(p_cam.z());
+  }
+
+  if (point3D_ids.empty()) return;  // skip if no valid points
+
+  // Setup ceres problem with reprojection + depth priors
+  ceres::Problem problem;
+  double shift_scale[2] = {0.0, 0.0};
+
+  std::vector<double> loss_magnitudes(point3D_ids.size(), 1.0);
+  std::vector<double> loss_params(point3D_ids.size(), 1.0);
+  std::vector<CeresBundleAdjustmentOptions::LossFunctionType> loss_types(
+      point3D_ids.size(),
+      CeresBundleAdjustmentOptions::LossFunctionType::TRIVIAL);
+
+  DepthPriorBundleAdjuster(&problem,
+                           image_id,
+                           point3D_ids,
+                           depths,
+                           loss_magnitudes,
+                           loss_params,
+                           loss_types,
+                           shift_scale,
+                           reconstruction,
+                           false,
+                           false,
+                           false);
+
+  EXPECT_GT(problem.NumResidualBlocks(),
+            static_cast<int>(point3D_ids.size()) - 1);
+
+  ceres::Solver::Options solver_options;
+  solver_options.max_num_iterations = 50;
+  solver_options.linear_solver_type = ceres::DENSE_QR;
+  ceres::Solver::Summary summary;
+  ceres::Solve(solver_options, &problem, &summary);
+
+  // shift should be near 0, scale should be near 0 (depths are GT)
+  EXPECT_NEAR(shift_scale[0], 0.0, 0.5);
+  EXPECT_NEAR(shift_scale[1], 0.0, 0.5);
+}
+
 }  // namespace
 }  // namespace colmap
