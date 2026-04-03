@@ -351,13 +351,37 @@ void BindBundleAdjuster(py::module& m) {
       .def_property_readonly("problem", &CeresBundleAdjuster::Problem);
 
   m.def("create_default_bundle_adjuster",
-        CreateDefaultBundleAdjuster,
+        [](const BundleAdjustmentOptions& options,
+           const BundleAdjustmentConfig& config,
+           Reconstruction& reconstruction)
+            -> std::shared_ptr<CeresBundleAdjuster> {
+          auto ba = CreateDefaultBundleAdjuster(options, config, reconstruction);
+          auto* ceres_ba = dynamic_cast<CeresBundleAdjuster*>(ba.get());
+          if (!ceres_ba) {
+            throw std::runtime_error(
+                "CreateDefaultBundleAdjuster did not return a CeresBundleAdjuster");
+          }
+          ba.release();
+          return std::shared_ptr<CeresBundleAdjuster>(ceres_ba);
+        },
         "options"_a,
         "config"_a,
         "reconstruction"_a);
 
   m.def("create_default_ceres_bundle_adjuster",
-        CreateDefaultCeresBundleAdjuster,
+        [](const BundleAdjustmentOptions& options,
+           const BundleAdjustmentConfig& config,
+           Reconstruction& reconstruction)
+            -> std::shared_ptr<CeresBundleAdjuster> {
+          auto ba = CreateDefaultCeresBundleAdjuster(options, config, reconstruction);
+          auto* ceres_ba = dynamic_cast<CeresBundleAdjuster*>(ba.get());
+          if (!ceres_ba) {
+            throw std::runtime_error(
+                "CreateDefaultCeresBundleAdjuster did not return a CeresBundleAdjuster");
+          }
+          ba.release();
+          return std::shared_ptr<CeresBundleAdjuster>(ceres_ba);
+        },
         "options"_a,
         "config"_a,
         "reconstruction"_a);
