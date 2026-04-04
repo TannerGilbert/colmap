@@ -68,5 +68,5 @@ __all__ = import_module_symbols(
 )
 __all__.extend(["__version__", "__ceres_version__"])
 
-__version__ = _core.__version__
+__version__ = _core.__version__ + "-zador"
 __ceres_version__ = _core.__ceres_version__
