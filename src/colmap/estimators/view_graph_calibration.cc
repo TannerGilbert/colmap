@@ -45,24 +45,6 @@ namespace {
 // Lower bound for focal length optimization to prevent numerical issues.
 constexpr double kFocalLengthLowerBound = 1e-3;
 
-// Input for focal length calibration: an image pair with its F matrix.
-struct FocalLengthCalibInput {
-  image_pair_t pair_id = kInvalidImagePairId;
-  camera_t camera_id1 = kInvalidCameraId;
-  camera_t camera_id2 = kInvalidCameraId;
-  Eigen::Matrix3d F = Eigen::Matrix3d::Zero();
-};
-
-// Result of focal length calibration.
-struct FocalLengthCalibResult {
-  // Optimized focal lengths per camera.
-  std::unordered_map<camera_t, double> focal_lengths;
-  // Squared calibration error per image pair (unitless, relative error).
-  std::unordered_map<image_pair_t, double> calibration_errors_sq;
-  // Whether the calibration succeeded.
-  bool success = false;
-};
-
 // Cross-validate prior focal lengths by checking the ratio of calibrated vs
 // uncalibrated pairs per camera. UNCALIBRATED pairs are converted to
 // CALIBRATED if both cameras have reliable priors.
@@ -191,8 +173,10 @@ void ReestimateRelativePoses(
   thread_pool.Wait();
 }
 
+}  // namespace
+
 // Core Ceres optimization for focal length calibration.
-// This is a pure function with no I/O dependencies.
+// Pure function with no I/O dependencies.
 // See: "Stable Intrinsic Auto-Calibration from Fundamental Matrices of Devices
 // with Uncorrelated Camera Parameters", Fetzer et al., WACV 2020.
 FocalLengthCalibResult CalibrateFocalLengths(
@@ -330,8 +314,6 @@ FocalLengthCalibResult CalibrateFocalLengths(
   result.success = true;
   return result;
 }
-
-}  // namespace
 
 std::unique_ptr<ceres::LossFunction>
 ViewGraphCalibrationOptions::CreateLossFunction() const {

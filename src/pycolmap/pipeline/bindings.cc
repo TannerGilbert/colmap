@@ -10,12 +10,15 @@ void BindMeshing(py::module& m);
 void BindMVS(py::module& m);
 #endif
 void BindSfM(py::module& m);
+void BindViewGraphCalibration(py::module& m);
 
 void BindPipeline(py::module& m) {
   BindImages(m);
   BindExtractFeatures(m);
   BindMatchFeatures(m);
   BindSfM(m);
+  // After BindSfM so ViewGraphCalibrationOptions is registered.
+  BindViewGraphCalibration(m);
 #if defined(COLMAP_MVS_ENABLED)
   BindMVS(m);
   BindMeshing(m);

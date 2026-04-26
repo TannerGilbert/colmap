@@ -29,10 +29,15 @@
 
 #pragma once
 
+#include "colmap/scene/camera.h"
 #include "colmap/scene/database.h"
+#include "colmap/util/types.h"
 
 #include <memory>
+#include <unordered_map>
+#include <vector>
 
+#include <Eigen/Core>
 #include <ceres/ceres.h>
 
 namespace colmap {
@@ -90,5 +95,34 @@ struct ViewGraphCalibrationOptions {
 // CALIBRATED. Pairs with high calibration error are tagged as DEGENERATE.
 bool CalibrateViewGraph(const ViewGraphCalibrationOptions& options,
                         Database* database);
+
+// Pure-function input for the inner Ceres focal-length calibration. Holds the
+// fundamental matrix per pair plus the two camera ids it constrains.
+struct FocalLengthCalibInput {
+  image_pair_t pair_id = kInvalidImagePairId;
+  camera_t camera_id1 = kInvalidCameraId;
+  camera_t camera_id2 = kInvalidCameraId;
+  Eigen::Matrix3d F = Eigen::Matrix3d::Zero();
+};
+
+// Result of the inner Ceres focal-length calibration. ``focal_lengths`` is
+// populated for every camera in ``cameras``; rejected ones are reset to the
+// camera's initial focal length. ``calibration_errors_sq`` is populated only
+// for pairs that were added to the Ceres problem (one entry per ``inputs``
+// element, in the same order).
+struct FocalLengthCalibResult {
+  std::unordered_map<camera_t, double> focal_lengths;
+  std::unordered_map<image_pair_t, double> calibration_errors_sq;
+  bool success = false;
+};
+
+// Run only the Ceres focal-length optimization and return the focals + per-pair
+// calibration errors, without touching a database, F/E recomputation, or pair
+// state. Exposed so external callers (e.g. the glomap-equivalent pyglomap
+// binding shim) can drive the optimization with their own scene state.
+FocalLengthCalibResult CalibrateFocalLengths(
+    const ViewGraphCalibrationOptions& options,
+    const std::vector<FocalLengthCalibInput>& inputs,
+    const std::unordered_map<camera_t, Camera>& cameras);
 
 }  // namespace colmap
