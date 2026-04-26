@@ -119,4 +119,18 @@ void BindViewGraphManipulation(py::module& m) {
         "re-decompose the relative pose from the pair's E/F/H using "
         "EstimateTwoViewGeometryPose. PLANAR pairs upgrade to CALIBRATED; "
         "translations are normalized to unit norm.");
+
+  m.def("filter_pairs_by_inlier_num",
+        &FilterPairsByInlierNum,
+        "view_graph"_a,
+        "min_inlier_num"_a,
+        "Mark pairs invalid when their inlier count is below "
+        "min_inlier_num. Mutates view_graph.image_pairs[*].is_valid.");
+
+  m.def("filter_pairs_by_inlier_ratio",
+        &FilterPairsByInlierRatio,
+        "view_graph"_a,
+        "min_inlier_ratio"_a,
+        "Mark pairs invalid when their inlier ratio (inliers / total "
+        "matches) is below min_inlier_ratio.");
 }

@@ -169,4 +169,36 @@ void DecomposeRelPose(CorrespondenceGraph& view_graph,
             << " pairs are pure rotation";
 }
 
+void FilterPairsByInlierNum(CorrespondenceGraph& view_graph,
+                            int min_inlier_num) {
+  size_t num_invalid = 0;
+  for (auto& [pair_id, image_pair] : view_graph.MutableImagePairs()) {
+    if (!image_pair.is_valid) continue;
+    if (static_cast<int>(image_pair.inliers.size()) < min_inlier_num) {
+      image_pair.is_valid = false;
+      ++num_invalid;
+    }
+  }
+  LOG(INFO) << "Filtered " << num_invalid
+            << " relative poses with inlier number < " << min_inlier_num;
+}
+
+void FilterPairsByInlierRatio(CorrespondenceGraph& view_graph,
+                              double min_inlier_ratio) {
+  size_t num_invalid = 0;
+  for (auto& [pair_id, image_pair] : view_graph.MutableImagePairs()) {
+    if (!image_pair.is_valid) continue;
+    const auto num_matches = image_pair.matches.rows();
+    if (num_matches <= 0) continue;
+    const double ratio =
+        static_cast<double>(image_pair.inliers.size()) / num_matches;
+    if (ratio < min_inlier_ratio) {
+      image_pair.is_valid = false;
+      ++num_invalid;
+    }
+  }
+  LOG(INFO) << "Filtered " << num_invalid
+            << " relative poses with inlier ratio < " << min_inlier_ratio;
+}
+
 }  // namespace colmap
