@@ -103,9 +103,7 @@ class GlobalPositioner {
   void AddPoint3DToProblem(point3D_t point3D_id,
                            Reconstruction& reconstruction);
 
-  // Add a single observation (regular or LC) for one point3D. The
-  // ``is_lc_observation`` flag selects which loss bucket the cascade
-  // routes to.
+  // Add one observation; is_lc_observation selects the loss bucket.
   void AddObservationToProblem(point3D_t point3D_id,
                                const TrackElement& observation,
                                bool is_lc_observation,

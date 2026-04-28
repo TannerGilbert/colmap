@@ -14,9 +14,7 @@
 namespace colmap {
 namespace {
 
-// Returns true if the pair has more (or equal) non-LC inliers than LC
-// inliers — i.e. tracking-dominated. Used by SolveCeres to choose the
-// per-pair loss (Huber for tracking, Cauchy for LC).
+// True if non-LC inliers >= LC inliers.
 bool IsTrackingPair(const CorrespondenceGraph::ImagePair& image_pair) {
   if (image_pair.inliers.empty()) return false;
   size_t lc_count = 0;
@@ -100,9 +98,7 @@ RotationAveragingProblem::RotationAveragingProblem(
     const CorrespondenceGraph* correspondence_graph)
     : options_(options),
       correspondence_graph_(correspondence_graph) {
-  // Fail-loud guard: skip_risky_LC_pairs reads ImagePair::are_lc from the
-  // CorrespondenceGraph; with no CG the per-pair LC filter silently never
-  // triggers. Force the caller to wire CG explicitly when opting in.
+  // skip_risky_LC_pairs requires a CorrespondenceGraph.
   THROW_CHECK(!options_.skip_risky_LC_pairs || correspondence_graph_ != nullptr)
       << "skip_risky_LC_pairs=true requires correspondence_graph; got nullptr";
   // Derive active_frame_ids from active_image_ids, and cache mappings.
@@ -254,12 +250,7 @@ void RotationAveragingProblem::BuildPairConstraints(
   for (const auto& [pair_id, edge] : pose_graph.ValidEdges()) {
     const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
 
-    // Skip pairs whose LC inliers strictly exceed non-LC inliers; LC-
-    // dominated pairs are loop-closures whose relative rotation often
-    // disagrees with track-based geometry and breaks RA convergence.
-    // Reads ImagePair.{inliers, are_lc} from the CorrespondenceGraph
-    // plumbed in via ctor; PoseGraph::Edge doesn't carry the per-pair
-    // {inliers, are_lc} fields.
+    // Skip LC-dominated pairs.
     if (options_.skip_risky_LC_pairs && correspondence_graph_ != nullptr) {
       const auto& cg_map = correspondence_graph_->ImagePairsMap();
       auto cg_pair_it = cg_map.find(pair_id);

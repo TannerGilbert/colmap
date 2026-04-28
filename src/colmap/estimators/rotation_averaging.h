@@ -68,20 +68,11 @@ struct RotationEstimatorOptions {
   // after solving, then recompute active set.
   double max_rotation_error_deg = 10.0;
 
-  // Optional extensions (default OFF; disabled = baseline RA).
-
-  // If true, drop pairs whose loop-closure inlier count exceeds non-LC
-  // inliers — prevents LC-contaminated pairs from breaking RA. Consumed by
-  // BuildPairConstraints in rotation_averaging_impl.cc when a
-  // CorrespondenceGraph& is plumbed through.
+  // Drop pairs where LC inliers exceed tracking inliers.
   bool skip_risky_LC_pairs = false;
 
-  // If true, switch from L1 + IRLS to a Ceres-based solver with differential
-  // loss functions (Huber for tracking pairs, Cauchy for LC pairs). Mutually
-  // exclusive with use_gravity. Also gates the MST initializer's LC-edge
-  // penalty: when true, ``ComputeMaximumPoseGraphSpanningTree`` subtracts
-  // kLCPenalty=1e9 from LC-dominated edges so the tree routes through
-  // tracking pairs first.
+  // Use Ceres solver with per-pair Huber/Cauchy loss instead of L1+IRLS.
+  // Mutually exclusive with use_gravity.
   bool use_video_constraints = false;
 
   // Loss scales for the video-aware Ceres solver.
@@ -98,16 +89,8 @@ class RotationEstimator {
   explicit RotationEstimator(const RotationEstimatorOptions& options)
       : options_(options) {}
 
-  // Estimates the global orientations of all views.
-  // Solves rotation averaging and registers frames with computed poses.
-  // active_image_ids defines which images to include.
-  // ``final_weights`` (out, optional): per-pair IRLS weight from the last
-  // successful iteration. Populated only when SolveIRLS runs.
-  // ``correspondence_graph`` (in, optional): Optional CorrespondenceGraph
-  // carrying per-pair ImagePair.{inliers, are_lc} used by the LC-aware
-  // paths below. Required when ``skip_risky_LC_pairs=true``; nullptr
-  // otherwise.
-  // Returns true on successful estimation.
+  // Estimate global orientations for active_image_ids.
+  // Returns true on success.
   bool EstimateRotations(
       const PoseGraph& pose_graph,
       const std::vector<PosePrior>& pose_priors,
@@ -134,10 +117,7 @@ class RotationEstimator {
       std::unordered_map<image_pair_t, double>* final_weights = nullptr,
       const class CorrespondenceGraph* correspondence_graph = nullptr);
 
-  // Initializes rotations from maximum spanning tree.
-  // ``correspondence_graph`` (in, optional): when non-null and
-  // ``options_.use_video_constraints`` is true, MST construction
-  // penalises LC-dominated edges.
+  // Initialize rotations from maximum spanning tree.
   void InitializeFromMaximumSpanningTree(
       const PoseGraph& pose_graph,
       const std::unordered_set<image_t>& active_image_ids,
@@ -154,16 +134,7 @@ bool InitializeRigRotationsFromImages(
     const std::unordered_map<image_t, Rigid3d>& cams_from_world,
     Reconstruction& reconstruction);
 
-// High-level rotation averaging solver that handles rig expansion.
-// For cameras with unknown cam_from_rig, first estimates their orientations
-// independently using an expanded reconstruction, then initializes the
-// cam_from_rig and runs rotation averaging on the original reconstruction.
-// ``final_weights`` (out, optional): per-pair IRLS weight from the last
-// successful iteration of the FINAL solve (if rig expansion runs, only the
-// final solve's weights are returned).
-// ``correspondence_graph`` (in, optional): Optional CorrespondenceGraph
-// carrying per-pair ImagePair.{inliers, are_lc} used by the LC-aware
-// paths below. Required when ``skip_risky_LC_pairs=true``.
+// High-level rotation averaging with rig expansion for unknown cam_from_rig.
 bool RunRotationAveraging(
     const RotationEstimatorOptions& options,
     PoseGraph& pose_graph,
@@ -172,18 +143,8 @@ bool RunRotationAveraging(
     std::unordered_map<image_pair_t, double>* final_weights = nullptr,
     const class CorrespondenceGraph* correspondence_graph = nullptr);
 
-// Compute the maximum spanning tree of ``pose_graph`` over ``image_ids``,
-// weighted by ``edge.num_matches``. Returns the root image_id and populates
-// ``parents``.
-//
-// When ``prioritize_tracking=true`` and ``correspondence_graph`` is non-null,
-// LC-dominated edges (where ``are_lc`` true count > non-LC inlier count) have
-// ``kLCPenalty=1e9`` subtracted from their weight, so the MST routes around
-// them. Vanilla colmap behaviour is recovered with
-// ``prioritize_tracking=false`` (or a null correspondence_graph).
-//
-// Exposed in the public header to support unit tests of the LC-penalty
-// branch.
+// MST weighted by match count. When prioritize_tracking is set and a
+// CorrespondenceGraph is provided, LC-dominated edges are penalized.
 image_t ComputeMaximumPoseGraphSpanningTree(
     const PoseGraph& pose_graph,
     const std::unordered_set<image_t>& image_ids,
