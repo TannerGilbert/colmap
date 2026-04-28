@@ -93,27 +93,25 @@ void BindSceneImage(py::module& m) {
                     py::overload_cast<>(&Image::Name),
                     &Image::SetName,
                     "Name of the image.")
-      // Pose accessor that prefers the Frame-derived pose (so Images loaded
-      // from disk via Reconstruction.read() return the correct value) and
-      // falls back to the public override field for standalone pipeline
-      // Images that have no Frame attached. Setter writes the field.
-      // Note: writing to an Image with a Frame leaves the Frame's pose
-      // unchanged; if both views are needed, use Reconstruction-level APIs.
+      // Pose accessor — reads Frame-derived pose; returns identity Rigid3d for
+      // images without a posed Frame (not yet registered). Writes update the
+      // Frame's rig_from_world; requires the image to have a Frame attached.
+      // Use Reconstruction.frame(img.frame_id).rig_from_world for bulk writes.
       .def_property(
           "cam_from_world",
           [](const Image& self) -> Rigid3d {
-            return self.HasPose() ? self.CamFromWorld() : self.cam_from_world;
+            return self.HasPose() ? self.CamFromWorld() : Rigid3d();
           },
           [](Image& self, const Rigid3d& value) {
-            self.cam_from_world = value;
-            if (self.HasFramePtr() && self.FramePtr()->HasPose()) {
-              self.FramePtr()->SetRigFromWorld(value);
-            }
+            THROW_CHECK(self.HasFramePtr())
+                << "Cannot set cam_from_world on an Image without an attached "
+                   "Frame. Add the image to a Reconstruction first, then write "
+                   "via rec.frame(img.frame_id).rig_from_world.";
+            self.FramePtr()->SetRigFromWorld(value);
           },
           "Pose of the image (cam_from_world). Reads the Frame-derived pose "
-          "when available, else the override field. Setter writes the "
-          "override field and, if a Frame is attached and posed, also "
-          "updates the Frame's rig_from_world.")
+          "when available, else identity. Setter requires the image to be "
+          "attached to a Frame (i.e. inside a Reconstruction).")
       .def_property_readonly(
           "has_pose", &Image::HasPose, "Whether the image has a valid pose.")
       .def_property(

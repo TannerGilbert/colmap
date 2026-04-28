@@ -169,12 +169,6 @@ class Image {
   // (L00, L10, L11) for lower triangular 2x2: L * L^T = Sigma^-1.
   std::vector<Eigen::Vector3d> angular_cholesky_xy;
 
-  // --- Pose / features (override-style fields) ---
-  // Direct cam_from_world override. Independent of the Frame-derived
-  // CamFromWorld() method; read/written by the standalone pipeline.
-  // Default = identity.
-  Rigid3d cam_from_world;
-
   // FORK-REMOVAL TODO — this entire `features` / `features_undist`
   // precomputation stack is fork-only. Kept on this branch for
   // reproducibility of the current research code; slated for removal

@@ -52,7 +52,7 @@ int FilterTracksByAngle(CorrespondenceGraph& /*view_graph*/,
       const Image& image = rec.Image(el.image_id);
       const Eigen::Vector3d& feature_undist =
           image.features_undist.at(el.point2D_idx);
-      Eigen::Vector3d pt_calc = image.cam_from_world * point3D.xyz;
+      Eigen::Vector3d pt_calc = image.CamFromWorld() * point3D.xyz;
       if (pt_calc(2) < EPS) continue;
 
       pt_calc = pt_calc.normalized();
@@ -88,7 +88,7 @@ int FilterTrackTriangulationAngle(CorrespondenceGraph& /*view_graph*/,
       const image_t image_id1 = elements[i1].image_id;
       auto it1 = proj_centers.find(image_id1);
       if (it1 == proj_centers.end()) {
-        const Rigid3d& cfw = rec.Image(image_id1).cam_from_world;
+        const Rigid3d cfw = rec.Image(image_id1).CamFromWorld();
         it1 = proj_centers
                   .emplace(image_id1,
                            cfw.rotation().inverse() * -cfw.translation())
