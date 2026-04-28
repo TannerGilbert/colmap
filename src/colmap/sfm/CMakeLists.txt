@@ -45,12 +45,10 @@ COLMAP_ADD_LIBRARY(
     PUBLIC_LINK_LIBS
         colmap_scene
         colmap_estimators
-        colmap_estimators_solvers
         colmap_util
     PRIVATE_LINK_LIBS
         colmap_geometry
         colmap_image
-        PoseLib
 )
 
 if(MSVC)

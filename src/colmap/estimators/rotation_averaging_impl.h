@@ -100,14 +100,6 @@ class RotationAveragingProblem {
     return pair_constraints_;
   }
 
-  // After a successful IRLS solve, ``RotationAveragingSolver::SolveIRLS``
-  // calls ``SetFinalWeightsFromIRLS(weights_irls)`` to capture the
-  // per-pair IRLS weight from the last successful iteration. Caller reads
-  // this for the consecutive-pair-weight degeneracy diagnostic.
-  void SetFinalWeightsFromIRLS(const Eigen::VectorXd& weights_irls);
-  const std::unordered_map<image_pair_t, double>& FinalWeights() const {
-    return final_weights_;
-  }
 
   // Accessors for the video-Ceres path (gated on !use_gravity).
   Eigen::VectorXd& MutableEstimatedRotations() { return estimated_rotations_; }
@@ -170,10 +162,6 @@ class RotationAveragingProblem {
   // Active frames for the current solve.
   std::unordered_set<frame_t> active_frame_ids_;
 
-  // Per-pair IRLS weight from the last successful iteration. Populated by
-  // SetFinalWeightsFromIRLS. Empty if SolveIRLS didn't run (e.g. L1-only
-  // path, or video-Ceres path).
-  std::unordered_map<image_pair_t, double> final_weights_;
 
   // For per-pair LC fields (inliers, are_lc) not carried by PoseGraph::Edge.
   const CorrespondenceGraph* correspondence_graph_ = nullptr;
