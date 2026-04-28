@@ -30,8 +30,13 @@
 #pragma once
 
 #include "colmap/geometry/rigid3.h"
+#include "colmap/scene/camera.h"
+#include "colmap/scene/image.h"
 #include "colmap/scene/reconstruction.h"
 #include "colmap/sensor/bitmap.h"
+#include "colmap/util/types.h"
+
+#include <unordered_map>
 
 namespace colmap {
 
@@ -114,5 +119,18 @@ void RectifyAndUndistortStereoImages(const UndistortCameraOptions& options,
                                      Bitmap* undistorted_image2,
                                      Camera* undistorted_camera,
                                      Eigen::Matrix4d* Q);
+
+// Populate ``Image::features_undist`` with normalized 3D bearing rays for
+// every distorted pixel in ``Image::features``. For each image, looks up the
+// associated camera in ``cameras`` and applies ``Camera::CamFromImg`` plus
+// ``.homogeneous().normalized()`` to every feature; per-image work is run
+// in parallel via ``ThreadPool``. Mutates ``images`` in place.
+//
+// If ``clean_points`` is true (default), always recomputes; if false, skips
+// images whose ``features_undist`` already has the same length as ``features``.
+void UndistortImageFeatures(
+    const std::unordered_map<camera_t, Camera>& cameras,
+    std::unordered_map<image_t, Image>& images,
+    bool clean_points = true);
 
 }  // namespace colmap

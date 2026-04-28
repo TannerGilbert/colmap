@@ -41,7 +41,15 @@ Image::Image()
       num_points3D_(0) {}
 
 Image::Image(const Image& other)
-    : name_(other.Name()),
+    : is_registered(other.is_registered),
+      features(other.features),
+      features_undist(other.features_undist),
+      angular_stddevs(other.angular_stddevs),
+      angular_cholesky_xy(other.angular_cholesky_xy),
+      is_inlier(other.is_inlier),
+      is_track_anchor(other.is_track_anchor),
+      is_excluded(other.is_excluded),
+      name_(other.Name()),
       camera_ptr_(other.HasCameraPtr() ? other.CameraPtr() : nullptr),
       frame_ptr_(other.HasFramePtr() ? other.FramePtr() : nullptr),
       points2D_(other.Points2D()),
@@ -68,6 +76,15 @@ Image& Image::operator=(const Image& other) {
     }
     num_points3D_ = other.NumPoints3D();
     points2D_ = other.Points2D();
+    // Public data members.
+    is_registered = other.is_registered;
+    features = other.features;
+    features_undist = other.features_undist;
+    angular_stddevs = other.angular_stddevs;
+    angular_cholesky_xy = other.angular_cholesky_xy;
+    is_inlier = other.is_inlier;
+    is_track_anchor = other.is_track_anchor;
+    is_excluded = other.is_excluded;
   }
   return *this;
 }

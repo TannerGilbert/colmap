@@ -32,6 +32,8 @@
 #include "colmap/image/warp.h"
 #include "colmap/math/math.h"
 #include "colmap/sensor/models.h"
+#include "colmap/util/logging.h"
+#include "colmap/util/threading.h"
 
 namespace colmap {
 
@@ -390,6 +392,43 @@ void RectifyAndUndistortStereoImages(const UndistortCameraOptions& options,
                                         *undistorted_camera,
                                         distorted_image2,
                                         undistorted_image2);
+}
+
+void UndistortImageFeatures(
+    const std::unordered_map<camera_t, Camera>& cameras,
+    std::unordered_map<image_t, Image>& images,
+    bool clean_points) {
+  std::vector<image_t> image_ids;
+  image_ids.reserve(images.size());
+  for (const auto& [image_id, image] : images) {
+    if (image.features_undist.size() == image.features.size() && !clean_points)
+      continue;
+    image_ids.push_back(image_id);
+  }
+
+  if (image_ids.empty()) return;
+
+  ThreadPool thread_pool(ThreadPool::kMaxNumThreads);
+  LOG(INFO) << "Undistorting " << image_ids.size() << " images...";
+  for (const image_t image_id : image_ids) {
+    Image& image = images.at(image_id);
+    const Camera& camera = cameras.at(image.CameraId());
+    thread_pool.AddTask([&image, &camera]() {
+      const size_t n = image.features.size();
+      image.features_undist.clear();
+      image.features_undist.reserve(n);
+      for (size_t i = 0; i < n; i++) {
+        const std::optional<Eigen::Vector2d> cam_pt =
+            camera.CamFromImg(image.features[i]);
+        THROW_CHECK(cam_pt.has_value())
+            << "CamFromImg failed for feature " << i << " of image "
+            << image.ImageId();
+        image.features_undist.emplace_back(
+            cam_pt->homogeneous().normalized());
+      }
+    });
+  }
+  thread_pool.Wait();
 }
 
 }  // namespace colmap

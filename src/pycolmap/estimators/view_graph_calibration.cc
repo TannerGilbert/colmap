@@ -18,23 +18,32 @@ namespace py = pybind11;
 
 namespace {
 
-// Replicate glomap's ViewGraphCalibrator::Solve() flow on top of colmap's pure
-// CalibrateFocalLengths function. Bypasses colmap4's higher-level
-// CalibrateViewGraph wrapper to preserve byte-for-byte parity with
-// pyglomap.run_view_graph_calibration during the pyglomap → pycolmap port.
-// Adopting the wrapper's richer behavior (cross_validate_prior_focal_lengths,
-// reestimate_relative_pose, F/E recomputation, config flips) is tracked in
-// videosfm-private issue #40.
+// Run focal-length view-graph calibration on top of colmap's pure
+// CalibrateFocalLengths function. Bypasses CalibrateViewGraph's richer
+// flow (cross_validate_prior_focal_lengths, reestimate_relative_pose,
+// F/E recomputation, config flips) — those are tracked separately.
 //
-// Mutates view_graph, cameras, images in place via opaque-bound references
-// (PYBIND11_MAKE_OPAQUE — see pycolmap/scene/types.h). No return value: the
-// caller's Python objects already hold the mutated state.
-void RunViewGraphCalibration(
-    CorrespondenceGraph& view_graph,
-    std::unordered_map<camera_t, Camera>& cameras,
-    std::unordered_map<image_t, Image>& images,
-    const ViewGraphCalibrationOptions& options) {
-  py::gil_scoped_release release;
+// Returns a dict {"view_graph", "cameras", "images"} with the mutated
+// state so the caller can rebind locally (pybind11 auto-converts the input
+// dicts to C++ copies, so mutations propagate via the returned dict, not
+// the inputs).
+py::dict RunViewGraphCalibration(CorrespondenceGraph& view_graph,
+                                 py::dict cameras_py,
+                                 py::dict images_py,
+                                 const ViewGraphCalibrationOptions& options) {
+  // Convert Python dicts → C++ maps. Holding GIL — iterating Python.
+  std::unordered_map<camera_t, Camera> cameras;
+  cameras.reserve(cameras_py.size());
+  for (auto item : cameras_py) {
+    cameras.emplace(py::cast<camera_t>(item.first),
+                    py::cast<Camera>(item.second));
+  }
+  std::unordered_map<image_t, Image> images;
+  images.reserve(images_py.size());
+  for (auto item : images_py) {
+    images.emplace(py::cast<image_t>(item.first),
+                   py::cast<Image>(item.second));
+  }
 
   // Build inputs: one per CALIBRATED/UNCALIBRATED valid pair with an F matrix.
   std::vector<FocalLengthCalibInput> inputs;
@@ -56,10 +65,12 @@ void RunViewGraphCalibration(
     pair_lookup[pair_id] = &image_pair;
   }
 
-  const FocalLengthCalibResult result =
-      CalibrateFocalLengths(options, inputs, cameras);
+  FocalLengthCalibResult result;
+  {
+    py::gil_scoped_release release;
+    result = CalibrateFocalLengths(options, inputs, cameras);
+  }
   if (!result.success) {
-    py::gil_scoped_acquire acquire;
     throw std::runtime_error("Failed to solve view graph calibration.");
   }
 
@@ -67,7 +78,7 @@ void RunViewGraphCalibration(
   // has_prior_focal_length are skipped (they were locked in the optimizer
   // and never moved). Cameras whose ratio was rejected by the optimizer have
   // result.focal_lengths[id] reset to the initial focal, so writing back is a
-  // no-op for them — equivalent to glomap's "skip rejected".
+  // no-op for them.
   for (auto& [camera_id, camera] : cameras) {
     auto it = result.focal_lengths.find(camera_id);
     if (it == result.focal_lengths.end()) continue;
@@ -78,7 +89,7 @@ void RunViewGraphCalibration(
   }
 
   // FilterImagePairs: invalidate pairs whose squared calibration error exceeds
-  // threshold. Mirrors glomap::ViewGraphCalibrator::FilterImagePairs.
+  // threshold.
   const double max_err_sq =
       options.max_calibration_error * options.max_calibration_error;
   size_t invalid_counter = 0;
@@ -94,6 +105,24 @@ void RunViewGraphCalibration(
             << " pairs (residual^2 > "
             << options.max_calibration_error * options.max_calibration_error
             << ")";
+
+  // Build a fresh Python dict (one Camera/Image per entry, deep copy via
+  // py::cast) so mutations to the C++ maps propagate back. Returning the
+  // C++ map directly through pybind11's STL caster + classh shared_ptr
+  // holder can move-from the values, leaving fields empty in the result.
+  py::dict cameras_out;
+  for (auto& [cid, cam] : cameras) {
+    cameras_out[py::cast(cid)] = py::cast(cam);
+  }
+  py::dict images_out;
+  for (auto& [iid, img] : images) {
+    images_out[py::cast(iid)] = py::cast(img);
+  }
+  py::dict output;
+  output["view_graph"] = view_graph;
+  output["cameras"] = cameras_out;
+  output["images"] = images_out;
+  return output;
 }
 
 }  // namespace
@@ -113,8 +142,6 @@ void BindViewGraphCalibration(py::module& m) {
         "images"_a,
         "options"_a,
         "Run view graph focal-length calibration on a CorrespondenceGraph + "
-        "cameras + images, bypassing colmap4's full CalibrateViewGraph "
-        "wrapper. Used during the pyglomap → pycolmap migration to preserve "
-        "byte-for-byte parity with pyglomap.run_view_graph_calibration; see "
-        "videosfm-private issue #40 for adopting the wrapper later.");
+        "cameras + images, bypassing CalibrateViewGraph's higher-level "
+        "wrapper (cross-validation, F/E recomputation, etc.).");
 }
