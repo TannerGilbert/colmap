@@ -143,7 +143,7 @@ bool RunRotationAveraging(
     std::unordered_map<image_pair_t, double>* final_weights = nullptr,
     const class CorrespondenceGraph* correspondence_graph = nullptr);
 
-// MST weighted by match count. When prioritize_tracking is set and a
+// MST weighted by inlier count. When prioritize_tracking is set and a
 // CorrespondenceGraph is provided, LC-dominated edges are penalized.
 image_t ComputeMaximumPoseGraphSpanningTree(
     const PoseGraph& pose_graph,
