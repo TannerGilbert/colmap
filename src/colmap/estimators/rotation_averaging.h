@@ -4,6 +4,7 @@
 #include "colmap/scene/pose_graph.h"
 #include "colmap/scene/reconstruction.h"
 
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -32,9 +33,6 @@ struct RotationEstimatorOptions {
 
   // Average step size threshold to terminate the IRLS minimization.
   double irls_step_convergence_threshold = 0.001;
-
-  // Gravity direction.
-  Eigen::Vector3d gravity_dir = Eigen::Vector3d(0, 1, 0);
 
   // The point where the Huber-like cost function switches from L1 to L2.
   double irls_loss_parameter_sigma = 5.0;  // in degrees
@@ -80,11 +78,15 @@ class RotationEstimator {
   // Estimates the global orientations of all views.
   // Solves rotation averaging and registers frames with computed poses.
   // active_image_ids defines which images to include.
+  // ``final_weights`` (out, optional): per-pair IRLS weight from the last
+  // successful iteration. Populated only when SolveIRLS runs.
   // Returns true on successful estimation.
-  bool EstimateRotations(const PoseGraph& pose_graph,
-                         const std::vector<PosePrior>& pose_priors,
-                         const std::unordered_set<image_t>& active_image_ids,
-                         Reconstruction& reconstruction);
+  bool EstimateRotations(
+      const PoseGraph& pose_graph,
+      const std::vector<PosePrior>& pose_priors,
+      const std::unordered_set<image_t>& active_image_ids,
+      Reconstruction& reconstruction,
+      std::unordered_map<image_pair_t, double>* final_weights = nullptr);
 
  private:
   // Maybe solves 1-DOF rotation averaging on the gravity-aligned subset.
@@ -100,7 +102,8 @@ class RotationEstimator {
       const PoseGraph& pose_graph,
       const std::vector<PosePrior>& pose_priors,
       const std::unordered_set<image_t>& active_image_ids,
-      Reconstruction& reconstruction);
+      Reconstruction& reconstruction,
+      std::unordered_map<image_pair_t, double>* final_weights = nullptr);
 
   // Initializes rotations from maximum spanning tree.
   void InitializeFromMaximumSpanningTree(
@@ -122,9 +125,22 @@ bool InitializeRigRotationsFromImages(
 // For cameras with unknown cam_from_rig, first estimates their orientations
 // independently using an expanded reconstruction, then initializes the
 // cam_from_rig and runs rotation averaging on the original reconstruction.
-bool RunRotationAveraging(const RotationEstimatorOptions& options,
-                          PoseGraph& pose_graph,
-                          Reconstruction& reconstruction,
-                          const std::vector<PosePrior>& pose_priors);
+// ``final_weights`` (out, optional): per-pair IRLS weight from the last
+// successful iteration of the FINAL solve (if rig expansion runs, only the
+// final solve's weights are returned).
+bool RunRotationAveraging(
+    const RotationEstimatorOptions& options,
+    PoseGraph& pose_graph,
+    Reconstruction& reconstruction,
+    const std::vector<PosePrior>& pose_priors,
+    std::unordered_map<image_pair_t, double>* final_weights = nullptr);
+
+// Compute the maximum spanning tree of ``pose_graph`` over ``image_ids``,
+// weighted by ``edge.num_matches``. Returns the root image_id and populates
+// ``parents``. Exposed in the public header to support unit tests.
+image_t ComputeMaximumPoseGraphSpanningTree(
+    const PoseGraph& pose_graph,
+    const std::unordered_set<image_t>& image_ids,
+    std::unordered_map<image_t, image_t>& parents);
 
 }  // namespace colmap

@@ -8,6 +8,8 @@
 #include <limits>
 
 #include <Eigen/CholmodSupport>
+#include <ceres/ceres.h>
+#include <ceres/rotation.h>
 
 namespace colmap {
 namespace {
@@ -230,6 +232,7 @@ void RotationAveragingProblem::BuildPairConstraints(
 
   for (const auto& [pair_id, edge] : pose_graph.ValidEdges()) {
     const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
+
     const auto& image1 = reconstruction.Image(image_id1);
     const auto& image2 = reconstruction.Image(image_id2);
     const auto& frame1 = *image1.FramePtr();
@@ -446,12 +449,28 @@ void RotationAveragingProblem::BuildConstraintMatrix(
   residuals_.resize(curr_row);
 }
 
-void RotationAveragingProblem::ComputeResiduals() {
-  // Set PRNG seed for deterministic jitter injection.
-  if (options_.random_seed >= 0) {
-    SetPRNGSeed(static_cast<unsigned>(options_.random_seed));
+// Translate the per-row IRLS weight vector into a per-pair map keyed by
+// image_pair_t. Each PairConstraint owns 1 (gravity-aligned) or 3
+// (full-3DOF) consecutive rows starting at constraint.row_index. Take the
+// weight at the first row of the constraint (all rows share the same
+// weight per ComputeIRLSWeights). Gauge-fixing rows (last
+// num_gauge_fixing_residuals_ rows) are excluded — they are not pair
+// residuals, just rotational-ambiguity anchors with weight=1 by
+// convention.
+void RotationAveragingProblem::SetFinalWeightsFromIRLS(
+    const Eigen::VectorXd& weights_irls) {
+  final_weights_.clear();
+  final_weights_.reserve(pair_constraints_.size());
+  for (const auto& [pair_id, constraint] : pair_constraints_) {
+    if (constraint.row_index < 0 ||
+        constraint.row_index >= weights_irls.size()) {
+      continue;
+    }
+    final_weights_[pair_id] = weights_irls[constraint.row_index];
   }
+}
 
+void RotationAveragingProblem::ComputeResiduals() {
   for (const auto& [pair_id, constraint] : pair_constraints_) {
     const frame_t frame_id1 = image_id_to_frame_id_.at(constraint.image_id1);
     const frame_t frame_id2 = image_id_to_frame_id_.at(constraint.image_id2);
@@ -633,6 +652,14 @@ void RotationAveragingProblem::ApplyResultsToReconstruction(
 }
 
 bool RotationAveragingSolver::Solve(RotationAveragingProblem& problem) {
+  // Seed the global PRNG once per solve. ComputeResiduals' boundary
+  // jitter consumer (RandomUniformReal) advances naturally across
+  // iterations from this seed; resetting per-iteration would replay
+  // the identical jitter sequence and break IRLS convergence.
+  if (options_.random_seed >= 0) {
+    SetPRNGSeed(static_cast<unsigned>(options_.random_seed));
+  }
+
   if (options_.max_num_l1_iterations > 0) {
     VLOG(2) << "Solving L1 regression problem";
     if (!SolveL1Regression(problem)) {
@@ -775,6 +802,7 @@ bool RotationAveragingSolver::SolveIRLS(RotationAveragingProblem& problem) {
   Eigen::VectorXd step(problem.NumParameters());
 
   int iteration = 0;
+  Eigen::VectorXd last_weights;
   for (iteration = 0; iteration < options_.max_num_irls_iterations;
        iteration++) {
     problem.ComputeResiduals();
@@ -784,6 +812,7 @@ bool RotationAveragingSolver::SolveIRLS(RotationAveragingProblem& problem) {
     if (!weights_irls) {
       return false;
     }
+    last_weights = *weights_irls;
 
     // Update the factorization for the weighted values.
     at_weight =
@@ -794,6 +823,13 @@ bool RotationAveragingSolver::SolveIRLS(RotationAveragingProblem& problem) {
     // Solve the least squares problem.
     step.setZero();
     step = llt.solve(at_weight * problem.Residuals());
+    // Mirror the L1 path's NaN guard (line 755). Without this, a singular
+    // pose-graph silently corrupts cams_from_world via UpdateState and
+    // SolveIRLS returns true with garbage residuals next iteration.
+    if (step.array().isNaN().any()) {
+      LOG(ERROR) << "IRLS step is NaN at iteration " << iteration;
+      return false;
+    }
     problem.UpdateState(step);
 
     const double avg_step = problem.AverageStepSize(step);
@@ -807,7 +843,14 @@ bool RotationAveragingSolver::SolveIRLS(RotationAveragingProblem& problem) {
   }
   VLOG(2) << "IRLS total iteration: " << iteration;
 
+  // Capture last successful iteration's per-pair weight for the
+  // consecutive-pair-weight diagnostic.
+  if (last_weights.size() > 0) {
+    problem.SetFinalWeightsFromIRLS(last_weights);
+  }
+
   return true;
 }
+
 
 }  // namespace colmap

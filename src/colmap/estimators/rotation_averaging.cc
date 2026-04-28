@@ -44,6 +44,12 @@ bool AllSensorsFromRigKnown(const std::unordered_map<rig_t, Rig>& rigs) {
 
 // Compute maximum spanning tree of the pose graph weighted by inlier count.
 // Returns the root image_id and populates the parents map.
+//
+// Defined in the enclosing colmap namespace (matching the public declaration
+// in rotation_averaging.h) so unit tests can exercise the LC-penalty branch
+// directly.
+}  // namespace
+
 image_t ComputeMaximumPoseGraphSpanningTree(
     const PoseGraph& pose_graph,
     const std::unordered_set<image_t>& image_ids,
@@ -59,12 +65,12 @@ image_t ComputeMaximumPoseGraphSpanningTree(
     idx_to_image_id.push_back(image_id);
   }
 
-  // Build edges and weights from view graph.
+  // Build edges and weights from the pose graph. Edge weight is the
+  // raw match count carried by ``edge.num_matches``.
   std::vector<std::pair<int, int>> edges;
   std::vector<float> weights;
   edges.reserve(pose_graph.NumEdges());
   weights.reserve(pose_graph.NumEdges());
-
   for (const auto& [pair_id, edge] : pose_graph.ValidEdges()) {
     const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
     const auto it1 = image_id_to_idx.find(image_id1);
@@ -90,6 +96,8 @@ image_t ComputeMaximumPoseGraphSpanningTree(
 
   return idx_to_image_id[tree.root];
 }
+
+namespace {
 
 // Computes the largest connected component and returns image ids.
 std::unordered_set<image_t> ComputeLargestConnectedComponentImageIds(
@@ -270,7 +278,8 @@ bool RotationEstimator::EstimateRotations(
     const PoseGraph& pose_graph,
     const std::vector<PosePrior>& pose_priors,
     const std::unordered_set<image_t>& active_image_ids,
-    Reconstruction& reconstruction) {
+    Reconstruction& reconstruction,
+    std::unordered_map<image_pair_t, double>* final_weights) {
   if (UseGravity(options_, pose_priors) &&
       !AllSensorsFromRigKnown(reconstruction.Rigs())) {
     return false;
@@ -285,8 +294,11 @@ bool RotationEstimator::EstimateRotations(
   }
 
   // Solve the full system.
-  if (!SolveRotationAveraging(
-          pose_graph, pose_priors, active_image_ids, reconstruction)) {
+  if (!SolveRotationAveraging(pose_graph,
+                              pose_priors,
+                              active_image_ids,
+                              reconstruction,
+                              final_weights)) {
     return false;
   }
 
@@ -396,7 +408,8 @@ bool RotationEstimator::SolveRotationAveraging(
     const PoseGraph& pose_graph,
     const std::vector<PosePrior>& pose_priors,
     const std::unordered_set<image_t>& active_image_ids,
-    Reconstruction& reconstruction) {
+    Reconstruction& reconstruction,
+    std::unordered_map<image_pair_t, double>* final_weights) {
   // Initialize rotations from maximum spanning tree. Note that without
   // intialization, the gravity-aligned rotation averaging is prone to random
   // flips by 180deg.
@@ -416,6 +429,11 @@ bool RotationEstimator::SolveRotationAveraging(
   }
 
   problem.ApplyResultsToReconstruction(reconstruction);
+
+  // Surface IRLS final weights for the consecutive-pair diagnostic.
+  if (final_weights != nullptr) {
+    *final_weights = problem.FinalWeights();
+  }
   return true;
 }
 
@@ -444,7 +462,13 @@ void RotationEstimator::InitializeFromMaximumSpanningTree(
   std::queue<image_t> indexes;
   indexes.push(root);
 
+  // Seed the root from its current reconstruction pose so the BFS
+  // propagates relative rotations on top of the prior root frame
+  // instead of identity. Without this, every descendant is rotated by
+  // R_root^-1 relative to the prior gauge, which can shift IRLS
+  // weights through the ``max_rotation_error_deg`` filter.
   std::unordered_map<image_t, Rigid3d> cams_from_world;
+  cams_from_world[root] = reconstruction.Image(root).CamFromWorld();
   while (!indexes.empty()) {
     image_t curr = indexes.front();
     indexes.pop();
@@ -576,10 +600,12 @@ bool InitializeRigRotationsFromImages(
   return true;
 }
 
-bool RunRotationAveraging(const RotationEstimatorOptions& options,
-                          PoseGraph& pose_graph,
-                          Reconstruction& reconstruction,
-                          const std::vector<PosePrior>& pose_priors) {
+bool RunRotationAveraging(
+    const RotationEstimatorOptions& options,
+    PoseGraph& pose_graph,
+    Reconstruction& reconstruction,
+    const std::vector<PosePrior>& pose_priors,
+    std::unordered_map<image_pair_t, double>* final_weights) {
   std::unordered_set<image_t> active_image_ids;
 
   // Step 1: Solve rotation averaging on the largest connected component.
@@ -596,8 +622,11 @@ bool RunRotationAveraging(const RotationEstimatorOptions& options,
     pose_graph.InvalidatePairsOutsideActiveImageIds(active_image_ids);
 
     RotationEstimator rotation_estimator(options);
-    if (!rotation_estimator.EstimateRotations(
-            pose_graph, pose_priors, active_image_ids, reconstruction)) {
+    if (!rotation_estimator.EstimateRotations(pose_graph,
+                                              pose_priors,
+                                              active_image_ids,
+                                              reconstruction,
+                                              final_weights)) {
       return false;
     }
   } else {
@@ -657,8 +686,11 @@ bool RunRotationAveraging(const RotationEstimatorOptions& options,
     options_ra.skip_initialization = true;
     options_ra.use_stratified = false;
     RotationEstimator rotation_estimator(options_ra);
-    if (!rotation_estimator.EstimateRotations(
-            pose_graph, pose_priors, active_image_ids, reconstruction)) {
+    if (!rotation_estimator.EstimateRotations(pose_graph,
+                                              pose_priors,
+                                              active_image_ids,
+                                              reconstruction,
+                                              final_weights)) {
       return false;
     }
   }
