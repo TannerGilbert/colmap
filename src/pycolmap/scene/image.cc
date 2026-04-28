@@ -175,20 +175,6 @@ void BindSceneImage(py::module& m) {
             for (Eigen::Index i = 0; i < v.size(); ++i)
               self.is_track_anchor[i] = v[i];
           })
-      .def_property(
-          "is_excluded",
-          [](const Image& self) -> Eigen::Array<bool, Eigen::Dynamic, 1> {
-            Eigen::Array<bool, Eigen::Dynamic, 1> arr(self.is_excluded.size());
-            for (size_t i = 0; i < self.is_excluded.size(); ++i)
-              arr[i] = self.is_excluded[i];
-            return arr;
-          },
-          [](Image& self,
-             const Eigen::Array<bool, Eigen::Dynamic, 1>& v) {
-            self.is_excluded.assign(v.size(), false);
-            for (Eigen::Index i = 0; i < v.size(); ++i)
-              self.is_excluded[i] = v[i];
-          })
       .def_readwrite("angular_stddevs", &Image::angular_stddevs)
       .def_readwrite("angular_cholesky_xy", &Image::angular_cholesky_xy)
       // FORK-REMOVAL TODO — `features` / `features_undist` are fork-only

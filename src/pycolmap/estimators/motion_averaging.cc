@@ -70,11 +70,6 @@ void BindGlobalPositioner(py::module& m) {
                          "If true, skip random init for both camera centers "
                          "and track xyz.")
           .def_readwrite(
-              "use_observation_exclusions",
-              &GlobalPositionerOptions::use_observation_exclusions,
-              "If true, observations with image.is_excluded[idx]=true are "
-              "skipped.")
-          .def_readwrite(
               "random_init_scale",
               &GlobalPositionerOptions::random_init_scale,
               "Cube size for random init of camera centers / points (linear).")

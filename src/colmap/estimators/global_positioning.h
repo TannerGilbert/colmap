@@ -52,11 +52,6 @@ struct GlobalPositionerOptions {
   // uncertainty. Set false to treat all cameras at full weight.
   bool apply_uncalibrated_loss_downweight = true;
 
-  // When true, observations with ``image.is_excluded[point2D_idx]`` are
-  // skipped. The flag itself lives on ``Image``; this option just gates
-  // whether GP reads it.
-  bool use_observation_exclusions = false;
-
   // Skip random-init for both camera centers and track xyz. Used to
   // continue from a previous solve.
   bool use_init = false;

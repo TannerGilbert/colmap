@@ -159,9 +159,6 @@ class Image {
   std::vector<bool> is_inlier;
   // Track anchor — if true, use the track-start geometry loss bucket.
   std::vector<bool> is_track_anchor;
-  // Hard exclusion — if true, observation is NOT added to the BA problem.
-  std::vector<bool> is_excluded;
-
   // --- Angular uncertainties (for anisotropic weighting) ---
   // (sigma_x, sigma_y) in radians per feature.
   std::vector<Eigen::Vector2d> angular_stddevs;

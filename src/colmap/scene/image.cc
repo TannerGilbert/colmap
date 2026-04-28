@@ -47,7 +47,6 @@ Image::Image(const Image& other)
       angular_cholesky_xy(other.angular_cholesky_xy),
       is_inlier(other.is_inlier),
       is_track_anchor(other.is_track_anchor),
-      is_excluded(other.is_excluded),
       name_(other.Name()),
       camera_ptr_(other.HasCameraPtr() ? other.CameraPtr() : nullptr),
       frame_ptr_(other.HasFramePtr() ? other.FramePtr() : nullptr),
@@ -84,7 +83,6 @@ Image& Image::operator=(const Image& other) {
     angular_cholesky_xy = other.angular_cholesky_xy;
     is_inlier = other.is_inlier;
     is_track_anchor = other.is_track_anchor;
-    is_excluded = other.is_excluded;
   }
   return *this;
 }

@@ -183,11 +183,6 @@ void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
 
     Image& image = reconstruction.Image(observation.image_id);
     if (!image.HasPose()) continue;
-    if (options_.use_observation_exclusions &&
-        observation.point2D_idx < image.is_excluded.size() &&
-        image.is_excluded[observation.point2D_idx]) {
-      continue;
-    }
 
     const std::optional<Eigen::Vector2d> cam_point =
         image.CameraPtr()->CamFromImg(
