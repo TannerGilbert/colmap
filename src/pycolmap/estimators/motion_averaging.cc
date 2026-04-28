@@ -204,6 +204,9 @@ void BindRotationEstimator(py::module& m) {
               "irls_step_convergence_threshold",
               &RotationEstimatorOptions::irls_step_convergence_threshold,
               "Average step size threshold to terminate IRLS.")
+          .def_readwrite("gravity_dir",
+                         &RotationEstimatorOptions::gravity_dir,
+                         "Gravity direction vector.")
           .def_readwrite(
               "irls_loss_parameter_sigma",
               &RotationEstimatorOptions::irls_loss_parameter_sigma,
