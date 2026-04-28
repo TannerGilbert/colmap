@@ -1,8 +1,10 @@
 #pragma once
 
+#include "colmap/estimators/ceres_loss.h"
 #include "colmap/scene/pose_graph.h"
 #include "colmap/scene/reconstruction.h"
 
+#include <memory>
 #include <string>
 
 #include <ceres/ceres.h>
@@ -29,17 +31,38 @@ struct GlobalPositionerOptions {
   // Constrain the minimum number of views per track
   int min_num_view_per_track = 3;
 
-  // PRNG seed for random initialization.
-  // If -1 (default), uses non-deterministic random_device seeding.
-  // If >= 0, uses deterministic seeding with the given value.
+  // PRNG seed; -1 = non-deterministic random_device.
   int random_seed = -1;
 
-  // Scaling factor for the loss function
-  double loss_function_scale = 0.1;
+  // Top-level robust loss applied to the BATA direction residual.
+  // Upstream colmap GP hardcoded ``HuberLoss(0.1)``; this surface mirrors
+  // ``CeresBundleAdjustmentOptions`` so callers can pick a different
+  // kernel without touching the GP body.
+  LossConfig main_loss = {LossFunctionType::HUBER, 0.1, 1.0};
 
   // Whether to use custom parameter block ordering for Schur-based solvers.
   // Disable for deterministic behavior when using a fixed random seed.
   bool use_parameter_block_ordering = true;
+
+  // Whether to apply a 0.5x ScaledLoss to BATA residuals from cameras
+  // whose focal length came from view-graph calibration rather than
+  // an EXIF prior (``Camera::has_prior_focal_length == false``). The
+  // heuristic downweights bearings whose direction was computed using
+  // an estimated focal, since the bearing inherits the focal estimate's
+  // uncertainty. Set false to treat all cameras at full weight.
+  bool apply_uncalibrated_loss_downweight = true;
+
+  // When true, observations with ``image.is_excluded[point2D_idx]`` are
+  // skipped. The flag itself lives on ``Image``; this option just gates
+  // whether GP reads it.
+  bool use_observation_exclusions = false;
+
+  // Skip random-init for both camera centers and track xyz. Used to
+  // continue from a previous solve.
+  bool use_init = false;
+
+  // Cube size for random-init of camera centers / points.
+  double random_init_scale = 100.0;
 
   // The options for the solver
   ceres::Solver::Options solver_options;
@@ -50,8 +73,9 @@ struct GlobalPositionerOptions {
     solver_options.function_tolerance = 1e-5;
   }
 
-  std::shared_ptr<ceres::LossFunction> CreateLossFunction() {
-    return std::make_shared<ceres::HuberLoss>(loss_function_scale);
+  std::shared_ptr<ceres::LossFunction> CreateLossFunction() const {
+    return std::shared_ptr<ceres::LossFunction>(
+        main_loss.CreateLossFunction().release());
   }
 };
 
