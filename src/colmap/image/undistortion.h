@@ -118,20 +118,11 @@ void RectifyAndUndistortStereoImages(const UndistortCameraOptions& options,
                                      Camera* undistorted_camera,
                                      Eigen::Matrix4d* Q);
 
-// FORK-REMOVAL TODO — this function only exists to populate
-// ``Image::features_undist``, which feeds two fork-only passes
-// (``ImagePairsInlierCount``, ``FilterTracksByAngle``). Slated for
-// removal together with that whole stack once the reproducibility
-// window closes. See `.claude/notes/glomap_audit/fork_removal_todo.md`.
+// FORK-REMOVAL TODO: only exists for ImagePairsInlierCount / FilterTracksByAngle.
 //
-// Populate ``Image::features_undist`` with normalized 3D bearing rays for
-// every distorted pixel in ``Image::features``. For each image, looks up the
-// associated camera via ``rec`` and applies ``Camera::CamFromImg`` plus
-// ``.homogeneous().normalized()`` to every feature; per-image work is run
-// in parallel via ``ThreadPool``. Mutates images in ``rec`` in place.
-//
-// If ``clean_points`` is true (default), always recomputes; if false, skips
-// images whose ``features_undist`` already has the same length as ``features``.
+// Populate Image::features_undist with normalized bearing rays from
+// Image::features. Parallelized via ThreadPool. If clean_points is false,
+// skips images already computed.
 void UndistortImageFeatures(Reconstruction& rec, bool clean_points = true);
 
 }  // namespace colmap

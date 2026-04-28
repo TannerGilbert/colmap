@@ -1,6 +1,5 @@
-// Pycolmap binding for FilterTracksByAngle and FilterTrackTriangulationAngle.
-// Bound at top-level ``pycolmap.filter_tracks_by_angle`` /
-// ``pycolmap.filter_track_triangulation_angle``.
+// Binding for FilterTracksByAngle / FilterTrackTriangulationAngle.
+// FORK-REMOVAL TODO: fork-only; see fork_removal_todo.md.
 
 #include "colmap/scene/correspondence_graph.h"
 #include "colmap/scene/point3d.h"
@@ -19,10 +18,6 @@ using namespace colmap;
 using namespace pybind11::literals;
 namespace py = pybind11;
 
-// FORK-REMOVAL TODO — entire `BindTrackFilter` (and the C++
-// `FilterTracksByAngle` / `FilterTrackTriangulationAngle` it wraps) is
-// fork-only. See `.claude/notes/glomap_audit/fork_removal_todo.md` for
-// the removal plan.
 void BindTrackFilter(py::module& m) {
   m.def(
       "filter_tracks_by_angle",

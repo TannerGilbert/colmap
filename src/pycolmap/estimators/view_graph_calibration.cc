@@ -19,12 +19,8 @@ namespace py = pybind11;
 
 namespace {
 
-// Run focal-length view-graph calibration on top of colmap's pure
-// CalibrateFocalLengths function. Bypasses CalibrateViewGraph's richer
-// flow (cross_validate_prior_focal_lengths, reestimate_relative_pose,
-// F/E recomputation, config flips) — those are tracked separately.
-//
-// Mutates rec (Camera params) and view_graph (pair validity) in place.
+// Focal-length calibration via CalibrateFocalLengths. Bypasses
+// CalibrateViewGraph's full flow. Mutates rec and view_graph in place.
 void RunViewGraphCalibration(CorrespondenceGraph& view_graph,
                              Reconstruction& rec,
                              const ViewGraphCalibrationOptions& options) {
@@ -48,8 +44,7 @@ void RunViewGraphCalibration(CorrespondenceGraph& view_graph,
     pair_lookup[pair_id] = &image_pair;
   }
 
-  // Build a local camera map for CalibrateFocalLengths (inner function keeps
-  // its dict signature — it's called once here, not in the binding layer).
+  // Build local camera map for CalibrateFocalLengths.
   std::unordered_map<camera_t, Camera> cameras;
   cameras.reserve(rec.NumCameras());
   for (auto& [cid, cam] : rec.Cameras()) {
@@ -97,14 +92,7 @@ void RunViewGraphCalibration(CorrespondenceGraph& view_graph,
 
 }  // namespace
 
-// ViewGraphCalibrationOptions is already bound by
-// src/pycolmap/pipeline/sfm.cc (for the higher-level `calibrate_view_graph`
-// wrapper). We reuse the same class — re-binding would error at module init.
 void BindViewGraphCalibration(py::module& m) {
-  // `options` has no default here: ViewGraphCalibrationOptions is registered
-  // by BindPipeline (sfm.cc), which runs after BindEstimators. Defaulting to
-  // ViewGraphCalibrationOptions() at this binding site fires before the type
-  // is registered and aborts module load. Caller always passes options.
   m.def("run_view_graph_calibration",
         &RunViewGraphCalibration,
         "view_graph"_a,

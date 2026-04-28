@@ -17,11 +17,7 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
     const TrackEstablishmentOptions& options) {
   using Observation = std::pair<image_t, point2D_t>;
 
-  // Union all matching observations. Iterate ``image_pair.matches`` indexed
-  // by ``image_pair.inliers`` directly — works for both the native colmap
-  // pipeline (geom-verify writes inliers) and downstream pipelines that
-  // populate the same fields without going through the flat_corrs
-  // ``FinalizeAfterMatchingComplete`` path.
+  // Union inlier matches into tracks.
   UnionFind<Observation> uf;
   for (const image_pair_t pair_id : valid_pair_ids) {
     const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);

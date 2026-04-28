@@ -179,10 +179,7 @@ void BindBundleAdjuster(py::module& m) {
           .value("HUBER", CeresBAOpts::LossFunctionType::HUBER);
   AddStringToEnumConstructor(PyCeresLossFunctionType);
 
-  // Shared (type, scale, weight) loss config struct used by BA, GP, and
-  // pose-prior options. Bound here in the BA binding because BA runs
-  // before motion-averaging in BindEstimators ordering, and GP / pose
-  // prior options reference this Python class via def_readwrite.
+  // LossConfig bound here (BA runs first); referenced by GP and pose priors.
   py::classh<LossConfig>(m, "LossConfig")
       .def(py::init<>())
       .def_readwrite("type", &LossConfig::type)

@@ -93,10 +93,8 @@ void BindSceneImage(py::module& m) {
                     py::overload_cast<>(&Image::Name),
                     &Image::SetName,
                     "Name of the image.")
-      // Pose accessor — reads Frame-derived pose; returns identity Rigid3d for
-      // images without a posed Frame (not yet registered). Writes update the
-      // Frame's rig_from_world; requires the image to have a Frame attached.
-      // Use Reconstruction.frame(img.frame_id).rig_from_world for bulk writes.
+      // Returns Frame-derived pose if available, else cam_from_world field.
+      // Setter writes the field only (does not update Frame).
       .def_property(
           "cam_from_world",
           [](const Image& self) -> Rigid3d {
