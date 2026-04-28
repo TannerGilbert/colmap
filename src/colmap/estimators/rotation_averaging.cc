@@ -42,8 +42,8 @@ bool AllSensorsFromRigKnown(const std::unordered_map<rig_t, Rig>& rigs) {
   return all_known;
 }
 
-// Compute the maximum spanning tree of the pose graph weighted by raw
-// match count. Returns the root image_id and populates the parents map.
+// Compute maximum spanning tree of the pose graph weighted by match count.
+// Returns the root image_id and populates the parents map.
 image_t ComputeMaximumPoseGraphSpanningTree(
     const PoseGraph& pose_graph,
     const std::unordered_set<image_t>& image_ids,
@@ -59,8 +59,7 @@ image_t ComputeMaximumPoseGraphSpanningTree(
     idx_to_image_id.push_back(image_id);
   }
 
-  // Build edges and weights from the pose graph. Edge weight is the
-  // raw match count carried by ``edge.num_matches``.
+  // Build edges and weights from the pose graph.
   std::vector<std::pair<int, int>> edges;
   std::vector<float> weights;
   edges.reserve(pose_graph.NumEdges());

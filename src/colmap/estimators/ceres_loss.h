@@ -35,8 +35,7 @@
 
 namespace colmap {
 
-// Public enum of supported Ceres robust loss kernels. Shared by all
-// estimator option structs that expose a configurable loss (BA, GP, ...).
+// Supported Ceres robust loss kernels.
 enum class LossFunctionType {
   TRIVIAL,
   SOFT_L1,
@@ -44,15 +43,11 @@ enum class LossFunctionType {
   HUBER,
 };
 
-// Build the corresponding ``ceres::LossFunction`` from a typed config.
-// Aborts via ``LOG(FATAL)`` if the enum value is unhandled.
+// Build a ceres::LossFunction from a typed config.
 std::unique_ptr<ceres::LossFunction> CreateLossFunction(
     LossFunctionType loss_function_type, double loss_function_scale);
 
-// (type, scale, weight) triple describing a robust-loss configuration.
-// The ``CreateLossFunction()`` factory wraps ``CreateLossFunction(type, scale)``
-// in a ``ScaledLoss(weight)`` when ``weight != 1``. Used by any estimator
-// that exposes a configurable per-residual loss with optional weight.
+// (type, scale, weight) triple. Wraps in ScaledLoss when weight != 1.
 struct LossConfig {
   LossFunctionType type = LossFunctionType::TRIVIAL;
   double scale = 1.0;

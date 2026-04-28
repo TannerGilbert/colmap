@@ -154,33 +154,21 @@ class Image {
   inline bool operator==(const Image& other) const;
   inline bool operator!=(const Image& other) const;
 
-  // --- Per-feature flags (set during pipeline phases) ---
-  // Inlier flag — if true, use trivial loss for this observation.
+  // Per-feature inlier flag for GP loss routing.
   std::vector<bool> is_inlier;
-  // Track anchor — if true, use the track-start geometry loss bucket.
+  // Per-feature track-anchor flag for GP loss routing.
   std::vector<bool> is_track_anchor;
-  // --- Angular uncertainties (for anisotropic weighting) ---
-  // (sigma_x, sigma_y) in radians per feature.
+  // Per-feature angular standard deviations (sigma_x, sigma_y) in radians.
   std::vector<Eigen::Vector2d> angular_stddevs;
-  // Cholesky factor of XY precision matrix in angular/ray space, stored as
-  // (L00, L10, L11) for lower triangular 2x2: L * L^T = Sigma^-1.
+  // Per-feature Cholesky factor (L00, L10, L11) of angular precision matrix.
   std::vector<Eigen::Vector3d> angular_cholesky_xy;
 
-  // FORK-REMOVAL TODO — this entire `features` / `features_undist`
-  // precomputation stack is fork-only. Kept on this branch for
-  // reproducibility of the current research code; slated for removal
-  // once that window closes. See
-  // `.claude/notes/glomap_audit/fork_removal_todo.md` for the full
-  // removal plan covering Image::features, Image::features_undist,
-  // UndistortImageFeatures, ImagePairsInlierCount, FilterTracksByAngle,
-  // and the related pycolmap bindings (~700 LOC across 12 files).
+  // FORK-REMOVAL TODO: features / features_undist are fork-only.
+  // See .claude/notes/glomap_audit/fork_removal_todo.md.
 
-  // 2D keypoints (xy) for this image. Distinct from points2D_ (which is
-  // colmap's Point2D struct list with point3D_id linkage). The standalone
-  // pipeline uses bare 2D coordinates without per-point Point2D objects.
+  // Raw 2D keypoints (xy), separate from points2D_.
   std::vector<Eigen::Vector2d> features;
-
-  // Normalized 3D rays for each feature. Populated by undistort_images().
+  // Undistorted 3D rays per feature.
   std::vector<Eigen::Vector3d> features_undist;
 
  private:

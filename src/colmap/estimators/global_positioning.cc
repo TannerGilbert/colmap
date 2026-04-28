@@ -141,11 +141,7 @@ void GlobalPositioner::AddPointToCameraConstraints(
           << " point to camera constraints were added to the position "
              "estimation problem.";
 
-  // Down-weight uncalibrated cameras (cameras whose focal length was
-  // estimated by view-graph calibration rather than an EXIF prior).
-  // Gated by ``apply_uncalibrated_loss_downweight`` so callers
-  // calibrated against the full-weight (no-uncertainty) behavior can
-  // disable it.
+  // Down-weight uncalibrated cameras.
   if (options_.apply_uncalibrated_loss_downweight) {
     loss_function_ptcam_uncalibrated_ = std::make_shared<ceres::ScaledLoss>(
         loss_function_.get(), 0.5, ceres::DO_NOT_TAKE_OWNERSHIP);

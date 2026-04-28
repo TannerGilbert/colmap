@@ -40,10 +40,9 @@ namespace colmap {
 
 // Ceres-specific bundle adjustment options.
 struct CeresBundleAdjustmentOptions {
-  // Back-compat alias for the now-public ``colmap::LossFunctionType``.
   using LossFunctionType = colmap::LossFunctionType;
 
-  // Robust loss applied to reprojection residuals.
+  // Robust loss for reprojection residuals.
   LossConfig main_loss;
 
   // Whether to use Ceres' CUDA linear algebra library, if available.
@@ -101,9 +100,7 @@ struct CeresBundleAdjustmentSummary : public BundleAdjustmentSummary {
 
 // Ceres-specific pose prior bundle adjustment options.
 struct CeresPosePriorBundleAdjustmentOptions {
-  // Robust loss applied to prior position residuals. Default scale is
-  // ``sqrt(chi2_95_3dof)`` so callers get the canonical 95% threshold
-  // unless they override it.
+  // Robust loss for prior position residuals.
   LossConfig prior_position_loss = {
       LossFunctionType::TRIVIAL,
       std::sqrt(kChiSquare95ThreeDof),
