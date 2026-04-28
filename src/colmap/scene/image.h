@@ -154,6 +154,39 @@ class Image {
   inline bool operator==(const Image& other) const;
   inline bool operator!=(const Image& other) const;
 
+  // --- Per-feature flags (set during pipeline phases) ---
+  // Inlier flag — if true, use trivial loss for this observation.
+  std::vector<bool> is_inlier;
+  // Track anchor — if true, use the track-start geometry loss bucket.
+  std::vector<bool> is_track_anchor;
+  // Hard exclusion — if true, observation is NOT added to the BA problem.
+  std::vector<bool> is_excluded;
+
+  // --- Angular uncertainties (for anisotropic weighting) ---
+  // (sigma_x, sigma_y) in radians per feature.
+  std::vector<Eigen::Vector2d> angular_stddevs;
+  // Cholesky factor of XY precision matrix in angular/ray space, stored as
+  // (L00, L10, L11) for lower triangular 2x2: L * L^T = Sigma^-1.
+  std::vector<Eigen::Vector3d> angular_cholesky_xy;
+
+  // --- Pose / registration / features (override-style fields) ---
+  // Direct cam_from_world override. Independent of the Frame-derived
+  // CamFromWorld() method; read/written by the standalone pipeline.
+  // Default = identity.
+  Rigid3d cam_from_world;
+
+  // Whether this image is currently registered (i.e. has a valid pose).
+  // Set by the pipeline; default false.
+  bool is_registered = false;
+
+  // 2D keypoints (xy) for this image. Distinct from points2D_ (which is
+  // colmap's Point2D struct list with point3D_id linkage). The standalone
+  // pipeline uses bare 2D coordinates without per-point Point2D objects.
+  std::vector<Eigen::Vector2d> features;
+
+  // Normalized 3D rays for each feature. Populated by undistort_images().
+  std::vector<Eigen::Vector3d> features_undist;
+
  private:
   // The name of the image, i.e. the relative path.
   std::string name_;

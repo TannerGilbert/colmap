@@ -93,11 +93,27 @@ void BindSceneImage(py::module& m) {
                     py::overload_cast<>(&Image::Name),
                     &Image::SetName,
                     "Name of the image.")
-      .def("cam_from_world",
-           &Image::CamFromWorld,
-           "The pose of the image, defined as the transformation from world to "
-           "camera space. This method is read-only and support non-trivial "
-           "frame (rig).")
+      // Pose accessor that prefers the Frame-derived pose (so Images loaded
+      // from disk via Reconstruction.read() return the correct value) and
+      // falls back to the public override field for standalone pipeline
+      // Images that have no Frame attached. Setter writes the field.
+      // Note: writing to an Image with a Frame leaves the Frame's pose
+      // unchanged; if both views are needed, use Reconstruction-level APIs.
+      .def_property(
+          "cam_from_world",
+          [](const Image& self) -> Rigid3d {
+            return self.HasPose() ? self.CamFromWorld() : self.cam_from_world;
+          },
+          [](Image& self, const Rigid3d& value) {
+            self.cam_from_world = value;
+            if (self.HasFramePtr() && self.FramePtr()->HasPose()) {
+              self.FramePtr()->SetRigFromWorld(value);
+            }
+          },
+          "Pose of the image (cam_from_world). Reads the Frame-derived pose "
+          "when available, else the override field. Setter writes the "
+          "override field and, if a Frame is attached and posed, also "
+          "updates the Frame's rig_from_world.")
       .def_property_readonly(
           "has_pose", &Image::HasPose, "Whether the image has a valid pose.")
       .def_property(
@@ -129,6 +145,57 @@ void BindSceneImage(py::module& m) {
       .def("has_pixel_covariances",
            &Image::HasPixelCovariances,
            "Check if pixel covariances are set and match points2D count.")
+      // Per-feature/per-image fields. Bound as def_property with Eigen-typed
+      // getters/setters so Python sees numpy.ndarray rather than list — the
+      // pipeline code does numpy fancy-indexing on these.
+      .def_property(
+          "is_inlier",
+          [](const Image& self) -> Eigen::Array<bool, Eigen::Dynamic, 1> {
+            Eigen::Array<bool, Eigen::Dynamic, 1> arr(self.is_inlier.size());
+            for (size_t i = 0; i < self.is_inlier.size(); ++i)
+              arr[i] = self.is_inlier[i];
+            return arr;
+          },
+          [](Image& self,
+             const Eigen::Array<bool, Eigen::Dynamic, 1>& v) {
+            self.is_inlier.assign(v.size(), false);
+            for (Eigen::Index i = 0; i < v.size(); ++i)
+              self.is_inlier[i] = v[i];
+          })
+      .def_property(
+          "is_track_anchor",
+          [](const Image& self) -> Eigen::Array<bool, Eigen::Dynamic, 1> {
+            Eigen::Array<bool, Eigen::Dynamic, 1> arr(
+                self.is_track_anchor.size());
+            for (size_t i = 0; i < self.is_track_anchor.size(); ++i)
+              arr[i] = self.is_track_anchor[i];
+            return arr;
+          },
+          [](Image& self,
+             const Eigen::Array<bool, Eigen::Dynamic, 1>& v) {
+            self.is_track_anchor.assign(v.size(), false);
+            for (Eigen::Index i = 0; i < v.size(); ++i)
+              self.is_track_anchor[i] = v[i];
+          })
+      .def_property(
+          "is_excluded",
+          [](const Image& self) -> Eigen::Array<bool, Eigen::Dynamic, 1> {
+            Eigen::Array<bool, Eigen::Dynamic, 1> arr(self.is_excluded.size());
+            for (size_t i = 0; i < self.is_excluded.size(); ++i)
+              arr[i] = self.is_excluded[i];
+            return arr;
+          },
+          [](Image& self,
+             const Eigen::Array<bool, Eigen::Dynamic, 1>& v) {
+            self.is_excluded.assign(v.size(), false);
+            for (Eigen::Index i = 0; i < v.size(); ++i)
+              self.is_excluded[i] = v[i];
+          })
+      .def_readwrite("angular_stddevs", &Image::angular_stddevs)
+      .def_readwrite("angular_cholesky_xy", &Image::angular_cholesky_xy)
+      .def_readwrite("is_registered", &Image::is_registered)
+      .def_readwrite("features", &Image::features)
+      .def_readwrite("features_undist", &Image::features_undist)
       .def(
           "set_point3D_for_point2D",
           &Image::SetPoint3DForPoint2D,
