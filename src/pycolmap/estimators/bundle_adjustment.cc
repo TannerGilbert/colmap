@@ -194,7 +194,7 @@ void BindBundleAdjuster(py::module& m) {
                &CeresBAOpts::CreateSolverOptions,
                "config"_a,
                "problem"_a)
-          .def_readwrite("main_loss",
+          .def_readwrite("loss",
                          &CeresBAOpts::main_loss,
                          "Robust loss applied to reprojection residuals "
                          "(LossConfig: type, scale, weight).")

@@ -1,8 +1,8 @@
 #include "colmap/sfm/track_establishment.h"
 
+#include "colmap/feature/types.h"
 #include "colmap/math/union_find.h"
 #include "colmap/util/logging.h"
-#include "colmap/util/types.h"
 
 #include <algorithm>
 #include <utility>
@@ -17,21 +17,19 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
     const TrackEstablishmentOptions& options) {
   using Observation = std::pair<image_t, point2D_t>;
 
-  // Union inlier matches into tracks.
+  // Union all matching observations.
   UnionFind<Observation> uf;
+  FeatureMatches matches;
   for (const image_pair_t pair_id : valid_pair_ids) {
     const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
     THROW_CHECK(image_id_to_keypoints.count(image_id1))
         << "Missing keypoints for image " << image_id1;
     THROW_CHECK(image_id_to_keypoints.count(image_id2))
         << "Missing keypoints for image " << image_id2;
-    const auto& image_pair = corr_graph.ImagePairsMap().at(pair_id);
-    const Eigen::MatrixXi& matches = image_pair.matches;
-    for (const int idx : image_pair.inliers) {
-      const point2D_t p2d1 = static_cast<point2D_t>(matches(idx, 0));
-      const point2D_t p2d2 = static_cast<point2D_t>(matches(idx, 1));
-      const Observation obs1(image_id1, p2d1);
-      const Observation obs2(image_id2, p2d2);
+    corr_graph.ExtractMatchesBetweenImages(image_id1, image_id2, matches);
+    for (const auto& match : matches) {
+      const Observation obs1(image_id1, match.point2D_idx1);
+      const Observation obs2(image_id2, match.point2D_idx2);
       if (obs2 < obs1) {
         uf.Union(obs1, obs2);
       } else {
