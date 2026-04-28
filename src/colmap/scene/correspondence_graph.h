@@ -66,6 +66,8 @@ class CorrespondenceGraph {
   };
 
   // Two-view image pair with geometry, matches, and metadata.
+  // Extends colmap core with glomap additions: image IDs, validity flags,
+  // loop closure markers, covariance, and full match data.
   struct ImagePair {
     // Default constructor.
     ImagePair() = default;
@@ -76,7 +78,7 @@ class CorrespondenceGraph {
           image_id2(img_id2),
           pair_id(ImagePairToPairId(img_id1, img_id2)) {}
 
-    // Image identifiers.
+    // Image identifiers (colmap upstream + glomap additions).
     image_t image_id1 = kInvalidImageId;
     image_t image_id2 = kInvalidImageId;
 
@@ -86,11 +88,13 @@ class CorrespondenceGraph {
     // Indicator whether the image pair is valid.
     bool is_valid = true;
 
-    // The number of inlier matches between pairs of images.
+    // The number of inlier matches between pairs of images (colmap upstream).
     point2D_t num_matches = 0;
 
-    // The two-view geometry of the image pair without matches.
+    // The two-view geometry of the image pair without matches (colmap upstream).
     struct TwoViewGeometry two_view_geometry;
+
+    // --- glomap additions below ---
 
     // Weight is the initial inlier rate.
     double weight = 0.0;
@@ -99,12 +103,18 @@ class CorrespondenceGraph {
     // Initialized to zero matrix to indicate it hasn't been computed yet.
     Eigen::Matrix3d cov_t = Eigen::Matrix3d::Zero();
 
+    // Indicator whether this is a loop closure.
+    bool is_LC = false;
+
     // All matches between the two images (not just inliers).
     // First column is feature index in image1, second column in image2.
     Eigen::MatrixXi matches;
 
     // Row indices of inliers in the matches matrix.
     std::vector<int> inliers;
+
+    // Whether each match is a loop closure match (same size as matches.rows()).
+    std::vector<bool> are_lc;
   };
 
   CorrespondenceGraph() = default;
@@ -198,7 +208,9 @@ class CorrespondenceGraph {
   inline std::unordered_map<image_pair_t, ImagePair>& MutableImagePairs() {
     return image_pairs_;
   }
-  // Const accessor for the internal image_pairs map.
+  // Const accessor for the internal image_pairs map. RA's
+  // skip_risky_LC_pairs path uses this to read ImagePair.{inliers, are_lc}
+  // without taking mutable access.
   inline const std::unordered_map<image_pair_t, ImagePair>& ImagePairsMap()
       const {
     return image_pairs_;

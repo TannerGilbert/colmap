@@ -85,6 +85,10 @@ class Track {
   inline bool operator==(const Track& other) const;
   inline bool operator!=(const Track& other) const;
 
+  // Elements contributed by loop closures (parallel to the standard
+  // elements_ list; same (image_id, point2D_idx) value type as TrackElement).
+  std::vector<TrackElement> lc_elements;
+
  private:
   std::vector<TrackElement> elements_;
 };
