@@ -57,9 +57,13 @@ void UpdateImagePairsConfig(CorrespondenceGraph& view_graph,
     const camera_t cid2 = rec.Image(image_pair.image_id2).CameraId();
     if (!camera_validity[cid1] || !camera_validity[cid2]) continue;
 
+    // Skip pairs whose decomposition never yielded a relative pose (e.g.
+    // F-only path or RANSAC failure). Without cam2_from_cam1 we cannot
+    // recompute F from intrinsics; leaving the pair UNCALIBRATED lets
+    // downstream filters drop it instead of crashing here.
+    if (!tvg.cam2_from_cam1.has_value()) continue;
+
     tvg.config = TwoViewGeometry::CALIBRATED;
-    THROW_CHECK(tvg.cam2_from_cam1.has_value())
-        << "UNCALIBRATED pair upgraded to CALIBRATED must have cam2_from_cam1";
     const Camera& c1 = rec.Camera(cid1);
     const Camera& c2 = rec.Camera(cid2);
     tvg.F = FundamentalFromEssentialMatrix(
@@ -112,8 +116,8 @@ void DecomposeRelPose(CorrespondenceGraph& view_graph,
         image_pair.two_view_geometry.config = TwoViewGeometry::CALIBRATED;
         return;
       }
-      // (Already filtered to prior-calibrated pairs above, so the
-      // early-return-without-prior-focal branch never fires.)
+      // (Already filtered to prior-calibrated pairs above, so the second
+      // glomap branch — the early-return-without-prior-focal — never fires.)
 
       // Normalize translation to unit norm when non-zero.
       auto& tvg = image_pair.two_view_geometry;

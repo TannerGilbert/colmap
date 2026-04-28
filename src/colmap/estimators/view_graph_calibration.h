@@ -115,8 +115,9 @@ struct FocalLengthCalibResult {
 
 // Run only the Ceres focal-length optimization and return the focals + per-pair
 // calibration errors, without touching a database, F/E recomputation, or pair
-// state. Exposed so external callers can drive the optimization with their
-// own scene state.
+// state. Exposed so external callers can drive the optimization with their own
+// scene state (e.g. an unordered_map<image_t, Image> not yet promoted to a
+// Reconstruction).
 FocalLengthCalibResult CalibrateFocalLengths(
     const ViewGraphCalibrationOptions& options,
     const std::vector<FocalLengthCalibInput>& inputs,
