@@ -1,6 +1,10 @@
 
 #pragma once
 
+#include "colmap/util/logging.h"
+
+#include <utility>
+
 #include <Eigen/Core>
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
@@ -14,6 +18,10 @@ namespace colmap {
 // Reference: Zhuang et al., "Baseline Desensitizing In Translation Averaging",
 // CVPR 2018.
 struct BATAPairwiseDirectionCostFunctor {
+  // Metadata for CovarianceWeightedCostFunctor compatibility.
+  static constexpr int kNumResiduals = 3;
+  using kParameterDims = std::integer_sequence<int, 3, 3, 1>;
+
   explicit BATAPairwiseDirectionCostFunctor(
       const Eigen::Vector3d& pos2_from_pos1_dir)
       : pos2_from_pos1_dir_(pos2_from_pos1_dir) {}

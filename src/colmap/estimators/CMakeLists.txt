@@ -38,6 +38,7 @@ COLMAP_ADD_LIBRARY(
         alignment.h alignment.cc
         bundle_adjustment.h bundle_adjustment.cc
         bundle_adjustment_ceres.h bundle_adjustment_ceres.cc
+        ceres_loss.h ceres_loss.cc
         coordinate_frame.h coordinate_frame.cc
         covariance.h covariance.cc
         generalized_pose.h generalized_pose.cc
