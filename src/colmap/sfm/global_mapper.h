@@ -36,7 +36,7 @@ struct GlobalMapperOptions {
     options.min_track_length = 3;
     options.print_summary = false;
     if (options.ceres) {
-      options.ceres->main_loss.type =
+      options.ceres->loss.type =
           CeresBundleAdjustmentOptions::LossFunctionType::HUBER;
       options.ceres->use_gpu = true;
       // TODO: Investigate whether disabling auto solver selection and using

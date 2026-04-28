@@ -43,7 +43,7 @@ struct CeresBundleAdjustmentOptions {
   using LossFunctionType = colmap::LossFunctionType;
 
   // Robust loss for reprojection residuals.
-  LossConfig main_loss;
+  LossConfig loss;
 
   // Whether to use Ceres' CUDA linear algebra library, if available.
   bool use_gpu = false;

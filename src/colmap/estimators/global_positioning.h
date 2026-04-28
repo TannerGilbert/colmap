@@ -37,7 +37,7 @@ struct GlobalPositionerOptions {
   int random_seed = -1;
 
   // Robust loss for the BATA direction residual.
-  LossConfig main_loss = {LossFunctionType::HUBER, 0.1, 1.0};
+  LossConfig loss = {LossFunctionType::HUBER, 0.1, 1.0};
 
   // Whether to use custom parameter block ordering for Schur-based solvers.
   // Disable for deterministic behavior when using a fixed random seed.
@@ -64,7 +64,7 @@ struct GlobalPositionerOptions {
 
   std::shared_ptr<ceres::LossFunction> CreateLossFunction() const {
     return std::shared_ptr<ceres::LossFunction>(
-        main_loss.CreateLossFunction().release());
+        loss.CreateLossFunction().release());
   }
 };
 

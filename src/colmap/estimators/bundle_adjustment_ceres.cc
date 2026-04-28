@@ -101,7 +101,7 @@ CeresBundleAdjustmentOptions::CeresBundleAdjustmentOptions() {
 
 std::unique_ptr<ceres::LossFunction>
 CeresBundleAdjustmentOptions::CreateLossFunction() const {
-  return main_loss.CreateLossFunction();
+  return loss.CreateLossFunction();
 }
 
 ceres::Solver::Options CeresBundleAdjustmentOptions::CreateSolverOptions(
@@ -209,7 +209,7 @@ ceres::Solver::Options CeresBundleAdjustmentOptions::CreateSolverOptions(
 }
 
 bool CeresBundleAdjustmentOptions::Check() const {
-  CHECK_OPTION_GE(main_loss.scale, 0);
+  CHECK_OPTION_GE(loss.scale, 0);
   CHECK_OPTION_LT(max_num_images_direct_dense_cpu_solver,
                   max_num_images_direct_sparse_cpu_solver);
   CHECK_OPTION_LT(max_num_images_direct_dense_gpu_solver,
@@ -1191,8 +1191,8 @@ void DepthPriorBundleAdjuster(
                 : ScaledDepthErrorCostFunctor::Create(depths[i]);
 
     CeresBundleAdjustmentOptions loss_opts;
-    loss_opts.main_loss.type = loss_types[i];
-    loss_opts.main_loss.scale = loss_params[i];
+    loss_opts.loss.type = loss_types[i];
+    loss_opts.loss.scale = loss_params[i];
     std::unique_ptr<ceres::LossFunction> loss_function =
         loss_opts.CreateLossFunction();
 

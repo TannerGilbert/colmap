@@ -707,7 +707,7 @@ bool IncrementalMapper::RegisterNextStructureLessImage(const Options& options,
 
   BundleAdjustmentOptions abs_pose_refinement_options;
   if (abs_pose_refinement_options.ceres) {
-    abs_pose_refinement_options.ceres->main_loss.type =
+    abs_pose_refinement_options.ceres->loss.type =
         CeresBundleAdjustmentOptions::LossFunctionType::CAUCHY;
     abs_pose_refinement_options.ceres->solver_options.logging_type =
         ceres::LoggingType::SILENT;
@@ -1203,7 +1203,7 @@ void IncrementalMapper::IterativeLocalRefinement(
     }
     // Only use robust cost function for first iteration.
     if (custom_ba_options.ceres) {
-      custom_ba_options.ceres->main_loss.type =
+      custom_ba_options.ceres->loss.type =
           CeresBundleAdjustmentOptions::LossFunctionType::TRIVIAL;
     }
   }

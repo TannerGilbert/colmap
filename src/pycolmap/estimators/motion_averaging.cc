@@ -52,7 +52,7 @@ void BindGlobalPositioner(py::module& m) {
                          "PRNG seed for random initialization. -1 for "
                          "non-deterministic.")
           .def_readwrite("loss",
-                         &GlobalPositionerOptions::main_loss,
+                         &GlobalPositionerOptions::loss,
                          "Top-level robust loss applied to the BATA "
                          "direction residual (LossConfig: type, scale, "
                          "weight). Default HUBER@0.1.")

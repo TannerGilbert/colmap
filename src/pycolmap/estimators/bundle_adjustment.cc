@@ -195,7 +195,7 @@ void BindBundleAdjuster(py::module& m) {
                "config"_a,
                "problem"_a)
           .def_readwrite("loss",
-                         &CeresBAOpts::main_loss,
+                         &CeresBAOpts::loss,
                          "Robust loss applied to reprojection residuals "
                          "(LossConfig: type, scale, weight).")
           .def_readwrite("use_gpu",
