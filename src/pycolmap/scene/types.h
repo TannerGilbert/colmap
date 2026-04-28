@@ -1,6 +1,7 @@
 #pragma once
 
 #include "colmap/scene/camera.h"
+#include "colmap/scene/correspondence_graph.h"
 #include "colmap/scene/frame.h"
 #include "colmap/scene/image.h"
 #include "colmap/scene/point2d.h"
@@ -34,3 +35,8 @@ PYBIND11_MAKE_OPAQUE(Point3DMap);
 using PoseGraphEdgeMap =
     std::unordered_map<colmap::image_pair_t, colmap::PoseGraph::Edge>;
 PYBIND11_MAKE_OPAQUE(PoseGraphEdgeMap);
+
+using ImagePairMap =
+    std::unordered_map<colmap::image_pair_t,
+                       colmap::CorrespondenceGraph::ImagePair>;
+PYBIND11_MAKE_OPAQUE(ImagePairMap);

@@ -5,6 +5,7 @@
 #include "colmap/util/types.h"
 
 #include "pycolmap/helpers.h"
+#include "pycolmap/scene/types.h"
 #include "pycolmap/utils.h"
 
 #include <pybind11/eigen.h>
@@ -41,6 +42,26 @@ void BindCorrespondenceGraph(py::module& m) {
           },
           "Convert range to list of correspondences.");
 
+  // Bind the public ImagePair struct.
+  py::classh<CorrespondenceGraph::ImagePair> PyImagePair(m, "ImagePair");
+  PyImagePair.def(py::init<>())
+      .def(py::init<image_t, image_t>(), "image_id1"_a, "image_id2"_a)
+      .def_readwrite("image_id1",
+                     &CorrespondenceGraph::ImagePair::image_id1)
+      .def_readwrite("image_id2",
+                     &CorrespondenceGraph::ImagePair::image_id2)
+      .def_readwrite("pair_id", &CorrespondenceGraph::ImagePair::pair_id)
+      .def_readwrite("is_valid", &CorrespondenceGraph::ImagePair::is_valid)
+      .def_readwrite("weight", &CorrespondenceGraph::ImagePair::weight)
+      .def_readwrite("matches", &CorrespondenceGraph::ImagePair::matches)
+      .def_readwrite("inliers", &CorrespondenceGraph::ImagePair::inliers)
+      .def_readwrite("cov_t", &CorrespondenceGraph::ImagePair::cov_t)
+      .def_readwrite("num_matches",
+                     &CorrespondenceGraph::ImagePair::num_matches)
+      .def_readwrite("two_view_geometry",
+                     &CorrespondenceGraph::ImagePair::two_view_geometry);
+  MakeDataclass(PyImagePair);
+
   auto PyCorrespondenceGraph =
       py::classh<CorrespondenceGraph>(m, "CorrespondenceGraph");
   PyCorrespondenceGraph.def(py::init<>())
@@ -62,7 +83,15 @@ void BindCorrespondenceGraph(py::module& m) {
            py::overload_cast<>(&CorrespondenceGraph::NumMatchesBetweenAllImages,
                                py::const_))
       .def("exists_image", &CorrespondenceGraph::ExistsImage, "image_id"_a)
-      .def("image_pairs", &CorrespondenceGraph::ImagePairs)
+      .def("image_pair_ids", &CorrespondenceGraph::ImagePairs)
+      .def_property_readonly(
+          "image_pairs",
+          [](CorrespondenceGraph& self) -> ImagePairMap& {
+            return self.MutableImagePairs();
+          },
+          py::return_value_policy::reference_internal,
+          "Mutable dictionary of image pairs, keyed by pair_id. "
+          "Allows dict-style access and mutation of ImagePair objects.")
       .def("add_image",
            &CorrespondenceGraph::AddImage,
            "image_id"_a,
@@ -145,6 +174,9 @@ void BindCorrespondenceGraph(py::module& m) {
   DefDeprecation(PyCorrespondenceGraph,
                  "find_correspondences_between_images",
                  "extract_matches_between_images");
+
+  // Bind the ImagePairMap as a Python dict.
+  py::bind_map<ImagePairMap>(m, "ImagePairMap");
 
   m.def(
       "build_correspondence_graph",
