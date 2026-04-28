@@ -19,6 +19,10 @@ using namespace colmap;
 using namespace pybind11::literals;
 namespace py = pybind11;
 
+// FORK-REMOVAL TODO — entire `BindTrackFilter` (and the C++
+// `FilterTracksByAngle` / `FilterTrackTriangulationAngle` it wraps) is
+// fork-only. See `.claude/notes/glomap_audit/fork_removal_todo.md` for
+// the removal plan.
 void BindTrackFilter(py::module& m) {
   m.def(
       "filter_tracks_by_angle",

@@ -175,6 +175,15 @@ class Image {
   // Default = identity.
   Rigid3d cam_from_world;
 
+  // FORK-REMOVAL TODO — this entire `features` / `features_undist`
+  // precomputation stack is fork-only. Kept on this branch for
+  // reproducibility of the current research code; slated for removal
+  // once that window closes. See
+  // `.claude/notes/glomap_audit/fork_removal_todo.md` for the full
+  // removal plan covering Image::features, Image::features_undist,
+  // UndistortImageFeatures, ImagePairsInlierCount, FilterTracksByAngle,
+  // and the related pycolmap bindings (~700 LOC across 12 files).
+
   // 2D keypoints (xy) for this image. Distinct from points2D_ (which is
   // colmap's Point2D struct list with point3D_id linkage). The standalone
   // pipeline uses bare 2D coordinates without per-point Point2D objects.

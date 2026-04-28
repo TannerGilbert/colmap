@@ -38,6 +38,17 @@
 
 namespace colmap {
 
+// FORK-REMOVAL TODO — this entire file (FilterTracksByAngle +
+// FilterTrackTriangulationAngle and the corresponding bodies in
+// track_filter.cc) is fork-only. Vanilla colmap does
+// triangulation-angle filtering inside the BA / triangulation loop via
+// ``ObservationManager::FindPoints3DWithSmallTriangulationAngle``, not
+// as a standalone pass. The only consumer is the F-side
+// `pycolmap.filter_tracks_by_angle` call from
+// `mpsfm/mapper/glomap/phases/global_positioning.py`. Slated for
+// removal once the reproducibility window closes; see
+// `.claude/notes/glomap_audit/fork_removal_todo.md`.
+
 // Drop ``Track::Elements`` whose bearing-vs-3D-point angle exceeds the
 // threshold. Reads ``Image::features_undist`` (precomputed unit ray)
 // per element. Calibrated cameras (``Camera::has_prior_focal_length``)

@@ -193,6 +193,8 @@ void BindSceneImage(py::module& m) {
           })
       .def_readwrite("angular_stddevs", &Image::angular_stddevs)
       .def_readwrite("angular_cholesky_xy", &Image::angular_cholesky_xy)
+      // FORK-REMOVAL TODO — `features` / `features_undist` are fork-only
+      // fields. See `.claude/notes/glomap_audit/fork_removal_todo.md`.
       .def_readwrite("features", &Image::features)
       .def_readwrite("features_undist", &Image::features_undist)
       .def(
