@@ -93,23 +93,10 @@ void BindSceneImage(py::module& m) {
                     py::overload_cast<>(&Image::Name),
                     &Image::SetName,
                     "Name of the image.")
-      // Returns Frame-derived pose if available, else cam_from_world field.
-      // Setter writes the field only (does not update Frame).
-      .def_property(
-          "cam_from_world",
-          [](const Image& self) -> Rigid3d {
-            return self.HasPose() ? self.CamFromWorld() : Rigid3d();
-          },
-          [](Image& self, const Rigid3d& value) {
-            THROW_CHECK(self.HasFramePtr())
-                << "Cannot set cam_from_world on an Image without an attached "
-                   "Frame. Add the image to a Reconstruction first, then write "
-                   "via rec.frame(img.frame_id).rig_from_world.";
-            self.FramePtr()->SetRigFromWorld(value);
-          },
-          "Pose of the image (cam_from_world). Reads the Frame-derived pose "
-          "when available, else identity. Setter requires the image to be "
-          "attached to a Frame (i.e. inside a Reconstruction).")
+      .def("cam_from_world",
+           &Image::CamFromWorld,
+           "The pose of the image, defined as the transformation from world to "
+           "camera space. Read-only; supports non-trivial frame (rig).")
       .def_property_readonly(
           "has_pose", &Image::HasPose, "Whether the image has a valid pose.")
       .def_property(
