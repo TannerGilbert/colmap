@@ -51,6 +51,10 @@ struct Point3D {
   // The color of the point in the range [0, 255].
   Eigen::Vector3ub color = Eigen::Vector3ub::Zero();
 
+  // Whether the 3D position has been computed (e.g. via global positioning
+  // or triangulation). Default false — xyz is a placeholder until set true.
+  bool is_initialized = false;
+
   inline bool HasError() const;
 
   inline bool operator==(const Point3D& other) const;
@@ -67,7 +71,7 @@ bool Point3D::HasError() const { return error != -1; }
 
 bool Point3D::operator==(const Point3D& other) const {
   return xyz == other.xyz && color == other.color && error == other.error &&
-         track == other.track;
+         is_initialized == other.is_initialized && track == other.track;
 }
 
 bool Point3D::operator!=(const Point3D& other) const {
