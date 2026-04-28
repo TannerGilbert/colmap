@@ -179,6 +179,16 @@ void BindBundleAdjuster(py::module& m) {
           .value("HUBER", CeresBAOpts::LossFunctionType::HUBER);
   AddStringToEnumConstructor(PyCeresLossFunctionType);
 
+  // Shared (type, scale, weight) loss config struct used by BA, GP, and
+  // pose-prior options. Bound here in the BA binding because BA runs
+  // before motion-averaging in BindEstimators ordering, and GP / pose
+  // prior options reference this Python class via def_readwrite.
+  py::classh<LossConfig>(m, "LossConfig")
+      .def(py::init<>())
+      .def_readwrite("type", &LossConfig::type)
+      .def_readwrite("scale", &LossConfig::scale)
+      .def_readwrite("weight", &LossConfig::weight);
+
   auto PyCeresBundleAdjustmentOptions =
       py::classh<CeresBAOpts>(m, "CeresBundleAdjustmentOptions")
           .def(py::init<>())
@@ -187,18 +197,10 @@ void BindBundleAdjuster(py::module& m) {
                &CeresBAOpts::CreateSolverOptions,
                "config"_a,
                "problem"_a)
-          .def_readwrite("loss_function_type",
-                         &CeresBAOpts::loss_function_type,
-                         "Loss function types: Trivial (non-robust) and Cauchy "
-                         "(robust) loss.")
-          .def_readwrite("loss_function_scale",
-                         &CeresBAOpts::loss_function_scale,
-                         "Scaling factor determines residual at which "
-                         "robustification takes place.")
-          .def_readwrite("loss_function_weight",
-                         &CeresBAOpts::loss_function_weight,
-                         "Multiplicative weight for loss function "
-                         "(wraps via ScaledLoss).")
+          .def_readwrite("main_loss",
+                         &CeresBAOpts::main_loss,
+                         "Robust loss applied to reprojection residuals "
+                         "(LossConfig: type, scale, weight).")
           .def_readwrite("use_gpu",
                          &CeresBAOpts::use_gpu,
                          "Whether to use Ceres' CUDA linear algebra library, "
@@ -300,14 +302,11 @@ void BindBundleAdjuster(py::module& m) {
       py::classh<CeresPosePriorBAOpts>(m,
                                        "CeresPosePriorBundleAdjustmentOptions")
           .def(py::init<>())
-          .def_readwrite(
-              "prior_position_loss_function_type",
-              &CeresPosePriorBAOpts::prior_position_loss_function_type,
-              "Loss function for prior position loss.")
-          .def_readwrite("prior_position_loss_scale",
-                         &CeresPosePriorBAOpts::prior_position_loss_scale,
-                         "Threshold on the residual for the robust loss (chi2 "
-                         "for 3DOF at 95% = 7.815).")
+          .def_readwrite("prior_position_loss",
+                         &CeresPosePriorBAOpts::prior_position_loss,
+                         "Robust loss applied to prior-position residuals "
+                         "(LossConfig: type, scale, weight). Default scale "
+                         "is sqrt(chi2_95_3dof) = sqrt(7.815).")
           .def("check", &CeresPosePriorBAOpts::Check);
   MakeDataclass(PyCeresPosePriorBundleAdjustmentOptions);
 

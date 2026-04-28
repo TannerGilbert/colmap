@@ -51,12 +51,79 @@ void BindGlobalPositioner(py::module& m) {
                          &GlobalPositionerOptions::random_seed,
                          "PRNG seed for random initialization. -1 for "
                          "non-deterministic.")
-          .def_readwrite("loss_function_scale",
-                         &GlobalPositionerOptions::loss_function_scale,
-                         "Scaling factor for the loss function.")
+          .def_readwrite("main_loss",
+                         &GlobalPositionerOptions::main_loss,
+                         "Top-level robust loss applied to the BATA "
+                         "direction residual (LossConfig: type, scale, "
+                         "weight). Default HUBER@0.1.")
           .def_readwrite("use_parameter_block_ordering",
                          &GlobalPositionerOptions::use_parameter_block_ordering,
-                         "Whether to use custom parameter block ordering.");
+                         "Whether to use custom parameter block ordering.")
+          .def_readwrite(
+              "apply_uncalibrated_loss_downweight",
+              &GlobalPositionerOptions::apply_uncalibrated_loss_downweight,
+              "Apply 0.5x ScaledLoss to BATA residuals from cameras whose "
+              "focal length lacks an EXIF prior. Default true. Set false "
+              "to disable the downweight.")
+          .def_readwrite("use_init",
+                         &GlobalPositionerOptions::use_init,
+                         "If true, skip random init for both camera centers "
+                         "and track xyz.")
+          .def_readwrite(
+              "use_observation_exclusions",
+              &GlobalPositionerOptions::use_observation_exclusions,
+              "If true, observations with image.is_excluded[idx]=true are "
+              "skipped.")
+          .def_readwrite(
+              "random_init_scale",
+              &GlobalPositionerOptions::random_init_scale,
+              "Cube size for random init of camera centers / points (linear).")
+          // Pass-through to ceres::Solver::Options sub-fields.
+          .def_property(
+              "num_threads",
+              [](const GlobalPositionerOptions& self) {
+                return self.solver_options.num_threads;
+              },
+              [](GlobalPositionerOptions& self, int v) {
+                self.solver_options.num_threads = v;
+              },
+              "Ceres solver thread count (-1 = auto).")
+          .def_property(
+              "max_num_iterations",
+              [](const GlobalPositionerOptions& self) {
+                return self.solver_options.max_num_iterations;
+              },
+              [](GlobalPositionerOptions& self, int v) {
+                self.solver_options.max_num_iterations = v;
+              },
+              "Ceres solver max iterations.")
+          .def_property(
+              "function_tolerance",
+              [](const GlobalPositionerOptions& self) {
+                return self.solver_options.function_tolerance;
+              },
+              [](GlobalPositionerOptions& self, double v) {
+                self.solver_options.function_tolerance = v;
+              },
+              "Ceres solver function tolerance.")
+          .def_property(
+              "gradient_tolerance",
+              [](const GlobalPositionerOptions& self) {
+                return self.solver_options.gradient_tolerance;
+              },
+              [](GlobalPositionerOptions& self, double v) {
+                self.solver_options.gradient_tolerance = v;
+              },
+              "Ceres solver gradient tolerance.")
+          .def_property(
+              "parameter_tolerance",
+              [](const GlobalPositionerOptions& self) {
+                return self.solver_options.parameter_tolerance;
+              },
+              [](GlobalPositionerOptions& self, double v) {
+                self.solver_options.parameter_tolerance = v;
+              },
+              "Ceres solver parameter tolerance.");
   MakeDataclass(PyGlobalPositionerOptions);
 
   m.def(
@@ -137,9 +204,6 @@ void BindRotationEstimator(py::module& m) {
               "irls_step_convergence_threshold",
               &RotationEstimatorOptions::irls_step_convergence_threshold,
               "Average step size threshold to terminate IRLS.")
-          .def_readwrite("gravity_dir",
-                         &RotationEstimatorOptions::gravity_dir,
-                         "Gravity direction vector.")
           .def_readwrite(
               "irls_loss_parameter_sigma",
               &RotationEstimatorOptions::irls_loss_parameter_sigma,
@@ -173,18 +237,40 @@ void BindRotationEstimator(py::module& m) {
       [](const RotationEstimatorOptions& options,
          PoseGraph& pose_graph,
          Reconstruction& reconstruction,
-         const std::vector<PosePrior>& pose_priors) {
-        py::gil_scoped_release release;
-        bool success = RunRotationAveraging(
-            options, pose_graph, reconstruction, pose_priors);
-        return success;
+         const std::vector<PosePrior>& pose_priors,
+         bool extract_final_weights) {
+        std::unordered_map<image_pair_t, double> final_weights;
+        bool success = false;
+        {
+          py::gil_scoped_release release;
+          success = RunRotationAveraging(
+              options,
+              pose_graph,
+              reconstruction,
+              pose_priors,
+              extract_final_weights ? &final_weights : nullptr);
+        }
+        if (!extract_final_weights) {
+          return py::cast(success);
+        }
+        py::dict result;
+        result["success"] = success;
+        py::dict weights_map;
+        for (const auto& [pair_id, weight] : final_weights) {
+          weights_map[py::cast(pair_id)] = weight;
+        }
+        result["final_weights"] = weights_map;
+        return py::cast<py::object>(result);
       },
       "options"_a,
       "pose_graph"_a,
       "reconstruction"_a,
       "pose_priors"_a,
+      "extract_final_weights"_a = false,
       "High-level rotation averaging solver that handles rig expansion. "
-      "Returns True if rotation averaging succeeded.");
+      "Returns True if rotation averaging succeeded. When "
+      "``extract_final_weights=True``, returns ``{success, final_weights}`` "
+      "dict instead.");
 }
 
 void BindMotionAveraging(py::module& m) {
