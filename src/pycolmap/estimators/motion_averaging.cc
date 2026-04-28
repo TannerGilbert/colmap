@@ -237,40 +237,17 @@ void BindRotationEstimator(py::module& m) {
       [](const RotationEstimatorOptions& options,
          PoseGraph& pose_graph,
          Reconstruction& reconstruction,
-         const std::vector<PosePrior>& pose_priors,
-         bool extract_final_weights) {
-        std::unordered_map<image_pair_t, double> final_weights;
-        bool success = false;
-        {
-          py::gil_scoped_release release;
-          success = RunRotationAveraging(
-              options,
-              pose_graph,
-              reconstruction,
-              pose_priors,
-              extract_final_weights ? &final_weights : nullptr);
-        }
-        if (!extract_final_weights) {
-          return py::cast(success);
-        }
-        py::dict result;
-        result["success"] = success;
-        py::dict weights_map;
-        for (const auto& [pair_id, weight] : final_weights) {
-          weights_map[py::cast(pair_id)] = weight;
-        }
-        result["final_weights"] = weights_map;
-        return py::cast<py::object>(result);
+         const std::vector<PosePrior>& pose_priors) {
+        py::gil_scoped_release release;
+        return RunRotationAveraging(
+            options, pose_graph, reconstruction, pose_priors);
       },
       "options"_a,
       "pose_graph"_a,
       "reconstruction"_a,
       "pose_priors"_a,
-      "extract_final_weights"_a = false,
       "High-level rotation averaging solver that handles rig expansion. "
-      "Returns True if rotation averaging succeeded. When "
-      "``extract_final_weights=True``, returns ``{success, final_weights}`` "
-      "dict instead.");
+      "Returns True if rotation averaging succeeded.");
 }
 
 void BindMotionAveraging(py::module& m) {
