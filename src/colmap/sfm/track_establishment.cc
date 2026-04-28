@@ -43,8 +43,7 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
     const CorrespondenceGraph& corr_graph,
     const std::unordered_map<image_t, std::vector<Eigen::Vector2d>>&
         image_id_to_keypoints,
-    const TrackEstablishmentOptions& options,
-    const MatchPredicate& ignore_match) {
+    const TrackEstablishmentOptions& options) {
   using Observation = std::pair<image_t, point2D_t>;
 
   // Union all matching observations. Iterate ``image_pair.matches`` indexed
@@ -64,9 +63,6 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
     for (const int idx : image_pair.inliers) {
       const point2D_t p2d1 = static_cast<point2D_t>(matches(idx, 0));
       const point2D_t p2d2 = static_cast<point2D_t>(matches(idx, 1));
-      if (ignore_match && ignore_match(image_id1, p2d1, image_id2, p2d2)) {
-        continue;
-      }
       const Observation obs1(image_id1, p2d1);
       const Observation obs2(image_id2, p2d2);
       if (obs2 < obs1) {
@@ -171,68 +167,6 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
 
   LOG(INFO) << "Before greedy subsample: " << candidate_points3D.size()
             << ", after: " << selected.size();
-  return selected;
-}
-
-std::unordered_map<point3D_t, Point3D> SubsampleTracks(
-    const TrackSubsampleOptions& options,
-    const std::unordered_set<image_t>& registered_image_ids,
-    const std::unordered_map<point3D_t, Point3D>& tracks_full) {
-  std::vector<std::pair<size_t, point3D_t>> track_lengths;
-  size_t dropped_by_length = 0;
-  for (const auto& [track_id, point3D] : tracks_full) {
-    const size_t length = point3D.track.Length();
-    if (length < static_cast<size_t>(options.min_num_views_per_track) ||
-        length > static_cast<size_t>(options.max_num_views_per_track)) {
-      ++dropped_by_length;
-      continue;
-    }
-    track_lengths.emplace_back(length, track_id);
-  }
-  std::sort(track_lengths.begin(), track_lengths.end(), std::greater<>());
-
-  // Selection domain = registered images.
-  std::unordered_map<image_t, int> tracks_per_camera;
-  for (const image_t image_id : registered_image_ids) {
-    tracks_per_camera[image_id] = 0;
-  }
-
-  std::unordered_map<point3D_t, Point3D> selected;
-  int cameras_left = static_cast<int>(tracks_per_camera.size());
-  for (const auto& [track_length, track_id] : track_lengths) {
-    const Point3D& src = tracks_full.at(track_id);
-
-    // Restrict to selection domain.
-    Point3D candidate;
-    for (const auto& el : src.track.Elements()) {
-      if (tracks_per_camera.count(el.image_id) == 0) continue;
-      candidate.track.AddElement(el);
-    }
-    if (candidate.track.Length() <
-        static_cast<size_t>(options.min_num_views_per_track)) {
-      continue;
-    }
-
-    // Greedy quota: a track is added if any element's PRE-increment
-    // count is within the target. Counters increment for every kept
-    // element regardless of whether the track was added.
-    bool added = false;
-    for (const auto& el : candidate.track.Elements()) {
-      auto& count = tracks_per_camera[el.image_id];
-      if (count > options.required_tracks_per_view) continue;
-      ++count;
-      if (count > options.required_tracks_per_view) --cameras_left;
-      if (!added) {
-        selected.emplace(track_id, candidate);
-        added = true;
-      }
-    }
-    if (cameras_left == 0) break;
-    if (static_cast<int>(selected.size()) > options.max_num_tracks) break;
-  }
-  LOG(INFO) << "Subsampled to " << selected.size() << " tracks (dropped "
-            << (tracks_full.size() - selected.size()) << ", "
-            << dropped_by_length << " by length)";
   return selected;
 }
 

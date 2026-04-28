@@ -87,29 +87,6 @@ double SampsonError(const Eigen::Matrix3d& E,
   return C * C / (Cx + Cy);
 }
 
-enum class GeometryConfig {
-  UNKNOWN,
-  ESSENTIAL,
-  FUNDAMENTAL,
-  HOMOGRAPHY,
-};
-
-struct PerPairStats {
-  GeometryConfig type = GeometryConfig::UNKNOWN;
-  size_t total_matches = 0;
-  size_t num_inliers = 0;
-  // Essential matrix
-  size_t failed_epipolar_E = 0;
-  size_t failed_cheirality_E = 0;
-  size_t failed_angle_check_E = 0;
-  size_t failed_epipole_check_E = 0;
-  // Fundamental matrix
-  size_t failed_epipolar_F = 0;
-  size_t failed_cheirality_F = 0;
-  // Homography
-  size_t failed_epipolar_H = 0;
-};
-
 class ImagePairInliers {
  public:
   ImagePairInliers(
@@ -124,12 +101,12 @@ class ImagePairInliers {
 
   // Score the pair via Sampson + cheirality + degeneracy gates. Stores
   // surviving match indices in ``image_pair.inliers``.
-  double ScoreError(PerPairStats& stats);
+  void ScoreError();
 
  protected:
-  double ScoreErrorEssential(PerPairStats& stats);
-  double ScoreErrorFundamental(PerPairStats& stats);
-  double ScoreErrorHomography(PerPairStats& stats);
+  void ScoreErrorEssential();
+  void ScoreErrorFundamental();
+  void ScoreErrorHomography();
 
   CorrespondenceGraph::ImagePair& image_pair;
   const std::unordered_map<image_t, Image>& images;
@@ -137,26 +114,22 @@ class ImagePairInliers {
   const InlierThresholdOptions& options;
 };
 
-double ImagePairInliers::ScoreError(PerPairStats& stats) {
+void ImagePairInliers::ScoreError() {
   if (image_pair.two_view_geometry.config == TwoViewGeometry::PLANAR ||
       image_pair.two_view_geometry.config == TwoViewGeometry::PANORAMIC ||
       image_pair.two_view_geometry.config ==
           TwoViewGeometry::PLANAR_OR_PANORAMIC) {
-    stats.type = GeometryConfig::HOMOGRAPHY;
-    return ScoreErrorHomography(stats);
+    ScoreErrorHomography();
   } else if (image_pair.two_view_geometry.config ==
              TwoViewGeometry::UNCALIBRATED) {
-    stats.type = GeometryConfig::FUNDAMENTAL;
-    return ScoreErrorFundamental(stats);
+    ScoreErrorFundamental();
   } else if (image_pair.two_view_geometry.config ==
              TwoViewGeometry::CALIBRATED) {
-    stats.type = GeometryConfig::ESSENTIAL;
-    return ScoreErrorEssential(stats);
+    ScoreErrorEssential();
   }
-  return 0;
 }
 
-double ImagePairInliers::ScoreErrorEssential(PerPairStats& stats) {
+void ImagePairInliers::ScoreErrorEssential() {
   const Rigid3d& cam2_from_cam1 =
       *image_pair.two_view_geometry.cam2_from_cam1;
   const Eigen::Matrix3d E = EssentialMatrixFromPose(cam2_from_cam1);
@@ -190,9 +163,8 @@ double ImagePairInliers::ScoreErrorEssential(PerPairStats& stats) {
   thres_angle += 1e-6;
   thres_epipole += 1e-6;
 
-  stats.total_matches = image_pair.matches.rows();
-  double score = 0.;
-  for (size_t k = 0; k < stats.total_matches; ++k) {
+  const size_t total_matches = image_pair.matches.rows();
+  for (size_t k = 0; k < total_matches; ++k) {
     // Use the undistorted features.
     const Eigen::Vector3d pt1 =
         images.at(image_id1).features_undist[image_pair.matches(k, 0)];
@@ -200,46 +172,27 @@ double ImagePairInliers::ScoreErrorEssential(PerPairStats& stats) {
         images.at(image_id2).features_undist[image_pair.matches(k, 1)];
     const double r2 = SampsonError(E, pt1, pt2);
 
-    // Epipolar.
-    if (r2 < sq_threshold) {
-      // Cheirality.
-      const bool cheirality =
-          CheckCheirality(cam2_from_cam1, pt1, pt2, 1e-2, 100.);
+    if (r2 >= sq_threshold) continue;
 
-      // Angle gate (placeholder; currently disabled).
-      const double diff_angle = pt1.dot(cam2_from_cam1.rotation().inverse() * pt2);
-      const bool angle_check = (diff_angle < thres_angle);
+    // Cheirality.
+    if (!CheckCheirality(cam2_from_cam1, pt1, pt2, 1e-2, 100.)) continue;
 
-      // Epipole gate.
-      const double diff_epipole1 = pt1.dot(epipole21);
-      const double diff_epipole2 = pt2.dot(epipole12);
-      const bool epipole_check =
-          (diff_epipole1 < thres_epipole && diff_epipole2 < thres_epipole);
+    // Angle gate (placeholder; currently disabled).
+    const double diff_angle = pt1.dot(cam2_from_cam1.rotation().inverse() * pt2);
+    if (diff_angle >= thres_angle) continue;
 
-      if (cheirality && angle_check && epipole_check) {
-        score += r2;
-        image_pair.inliers.push_back(k);
-      } else {
-        score += sq_threshold;
-        if (!cheirality) {
-          stats.failed_cheirality_E++;
-        } else if (!angle_check) {
-          stats.failed_angle_check_E++;
-        } else if (!epipole_check) {
-          stats.failed_epipole_check_E++;
-        }
-      }
-    } else {
-      score += sq_threshold;
-      stats.failed_epipolar_E++;
+    // Epipole gate.
+    const double diff_epipole1 = pt1.dot(epipole21);
+    const double diff_epipole2 = pt2.dot(epipole12);
+    if (diff_epipole1 >= thres_epipole || diff_epipole2 >= thres_epipole) {
+      continue;
     }
-  }
 
-  stats.num_inliers = image_pair.inliers.size();
-  return score;
+    image_pair.inliers.push_back(k);
+  }
 }
 
-double ImagePairInliers::ScoreErrorFundamental(PerPairStats& stats) {
+void ImagePairInliers::ScoreErrorFundamental() {
   if (image_pair.inliers.size() > 0) {
     image_pair.inliers.clear();
   }
@@ -269,12 +222,10 @@ double ImagePairInliers::ScoreErrorFundamental(PerPairStats& stats) {
 
   const double thres = options.max_epipolar_error_F;
   const double sq_threshold = thres * thres;
-  double score = 0.;
 
-  stats.total_matches = image_pair.matches.rows();
+  const size_t total_matches = image_pair.matches.rows();
   std::vector<int> inliers_pre;
-  std::vector<double> errors;
-  for (size_t k = 0; k < stats.total_matches; ++k) {
+  for (size_t k = 0; k < total_matches; ++k) {
     const Eigen::Vector2d pt1 =
         images.at(image_id1).features[image_pair.matches(k, 0)];
     const Eigen::Vector2d pt2 =
@@ -284,42 +235,30 @@ double ImagePairInliers::ScoreErrorFundamental(PerPairStats& stats) {
                                    pt2.homogeneous(),
                                    *image_pair.two_view_geometry.F);
 
-    if (r2 < sq_threshold) {
-      signums.push_back(GetOrientationSignum(
-          *image_pair.two_view_geometry.F, epipole, pt1, pt2));
-      if (signums.back() > 0) {
-        positive_count++;
-      } else {
-        negative_count++;
-      }
-      inliers_pre.push_back(k);
-      errors.push_back(r2);
+    if (r2 >= sq_threshold) continue;
+
+    signums.push_back(GetOrientationSignum(
+        *image_pair.two_view_geometry.F, epipole, pt1, pt2));
+    if (signums.back() > 0) {
+      positive_count++;
     } else {
-      score += sq_threshold;
-      stats.failed_epipolar_F++;
+      negative_count++;
     }
+    inliers_pre.push_back(k);
   }
 
   // If we cannot distinguish the signum, the pair is invalid.
-  if (positive_count == negative_count) return 0;
+  if (positive_count == negative_count) return;
   const bool is_positive = (positive_count > negative_count);
 
   for (size_t k = 0; k < inliers_pre.size(); k++) {
-    const bool cheirality = (signums[k] > 0) == is_positive;
-    if (!cheirality) {
-      score += sq_threshold;
-      stats.failed_cheirality_F++;
-    } else {
+    if ((signums[k] > 0) == is_positive) {
       image_pair.inliers.push_back(inliers_pre[k]);
-      score += errors[k];
     }
   }
-
-  stats.num_inliers = image_pair.inliers.size();
-  return score;
 }
 
-double ImagePairInliers::ScoreErrorHomography(PerPairStats& stats) {
+void ImagePairInliers::ScoreErrorHomography() {
   if (image_pair.inliers.size() > 0) {
     image_pair.inliers.clear();
   }
@@ -329,9 +268,8 @@ double ImagePairInliers::ScoreErrorHomography(PerPairStats& stats) {
 
   const double thres = options.max_epipolar_error_H;
   const double sq_threshold = thres * thres;
-  double score = 0.;
-  stats.total_matches = image_pair.matches.rows();
-  for (size_t k = 0; k < stats.total_matches; ++k) {
+  const size_t total_matches = image_pair.matches.rows();
+  for (size_t k = 0; k < total_matches; ++k) {
     const Eigen::Vector2d pt1 =
         images.at(image_id1).features[image_pair.matches(k, 0)];
     const Eigen::Vector2d pt2 =
@@ -339,23 +277,11 @@ double ImagePairInliers::ScoreErrorHomography(PerPairStats& stats) {
     const double r2 = ComputeSquaredHomographyError(
         pt1, pt2, *image_pair.two_view_geometry.H);
 
+    // TODO: cheirality check for homography. Is that a thing?
     if (r2 < sq_threshold) {
-      // TODO: cheirality check for homography. Is that a thing?
-      const bool cheirality = true;
-      if (cheirality) {
-        score += r2;
-        image_pair.inliers.push_back(k);
-      } else {
-        score += sq_threshold;
-      }
-    } else {
-      score += sq_threshold;
-      stats.failed_epipolar_H++;
+      image_pair.inliers.push_back(k);
     }
   }
-
-  stats.num_inliers = image_pair.inliers.size();
-  return score;
 }
 
 }  // namespace
@@ -373,8 +299,7 @@ void ImagePairsInlierCount(
 
     if (image_pair.is_valid == false) continue;
     ImagePairInliers inlier_finder(image_pair, images, options, &cameras);
-    PerPairStats pair_stats;
-    inlier_finder.ScoreError(pair_stats);
+    inlier_finder.ScoreError();
   }
 }
 

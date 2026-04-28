@@ -193,7 +193,6 @@ void BindSceneImage(py::module& m) {
           })
       .def_readwrite("angular_stddevs", &Image::angular_stddevs)
       .def_readwrite("angular_cholesky_xy", &Image::angular_cholesky_xy)
-      .def_readwrite("is_registered", &Image::is_registered)
       .def_readwrite("features", &Image::features)
       .def_readwrite("features_undist", &Image::features_undist)
       .def(

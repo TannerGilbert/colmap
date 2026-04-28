@@ -95,14 +95,6 @@ void BindImagePairInliers(py::module& m) {
       py::classh<InlierThresholdOptions>(
           m, "InlierThresholdOptions")
           .def(py::init<>())
-          .def_readwrite("max_angle_error",
-                         &InlierThresholdOptions::max_angle_error)
-          .def_readwrite(
-              "max_reprojection_error",
-              &InlierThresholdOptions::max_reprojection_error)
-          .def_readwrite(
-              "min_triangulation_angle",
-              &InlierThresholdOptions::min_triangulation_angle)
           .def_readwrite(
               "max_epipolar_error_E",
               &InlierThresholdOptions::max_epipolar_error_E)
@@ -114,15 +106,7 @@ void BindImagePairInliers(py::module& m) {
               &InlierThresholdOptions::max_epipolar_error_H)
           .def_readwrite(
               "min_angle_from_epipole",
-              &InlierThresholdOptions::min_angle_from_epipole)
-          .def_readwrite("min_inlier_num",
-                         &InlierThresholdOptions::min_inlier_num)
-          .def_readwrite(
-              "min_inlier_ratio",
-              &InlierThresholdOptions::min_inlier_ratio)
-          .def_readwrite(
-              "max_rotation_error",
-              &InlierThresholdOptions::max_rotation_error);
+              &InlierThresholdOptions::min_angle_from_epipole);
   MakeDataclass(PyOpts);
 
   m.def("image_pairs_inlier_count",

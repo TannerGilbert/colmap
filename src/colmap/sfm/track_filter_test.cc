@@ -78,7 +78,6 @@ Point3D MakePoint3D(const Eigen::Vector3d& xyz,
                     const std::vector<std::pair<image_t, point2D_t>>& obs) {
   Point3D point3D;
   point3D.xyz = xyz;
-  point3D.is_initialized = true;
   for (const auto& [image_id, p2d_idx] : obs) {
     point3D.track.AddElement(image_id, p2d_idx);
   }

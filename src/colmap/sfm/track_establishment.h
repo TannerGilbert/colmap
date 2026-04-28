@@ -33,10 +33,8 @@
 #include "colmap/scene/point3d.h"
 #include "colmap/util/types.h"
 
-#include <functional>
 #include <limits>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include <Eigen/Core>
@@ -58,18 +56,11 @@ struct TrackEstablishmentOptions {
   int required_tracks_per_view = std::numeric_limits<int>::max();
 };
 
-// Predicate: returns true to exclude a match from the union-find phase.
-// Arguments are the two endpoints of the match. Optional hook for callers
-// that need to skip specific matches (e.g. flagged with downstream
-// metadata) without modifying the underlying CorrespondenceGraph.
-using MatchPredicate =
-    std::function<bool(image_t, point2D_t, image_t, point2D_t)>;
-
 // Build tracks from a correspondence graph via union-find over inlier
 // matches, intra-image consistency check, length filter, and an optional
 // greedy length-sorted subsample. Returns ``{point3D_id: Point3D}`` with
-// each ``Point3D::track`` populated; xyz / color / is_initialized are
-// default-constructed and left for downstream triangulation to fill.
+// each ``Point3D::track`` populated; xyz / color are default-constructed
+// and left for downstream triangulation to fill.
 //
 // Inputs:
 //   * ``valid_pair_ids``: image pairs to iterate. Native callers pass
@@ -82,41 +73,11 @@ using MatchPredicate =
 //   * ``image_id_to_keypoints``: per-image 2D keypoints used for the
 //     intra-image consistency check.
 //   * ``options``: the three thresholds above.
-//   * ``ignore_match``: optional. When non-null and returns true for a
-//     match, that match is skipped in the union-find phase.
 std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
     const std::vector<image_pair_t>& valid_pair_ids,
     const CorrespondenceGraph& corr_graph,
     const std::unordered_map<image_t, std::vector<Eigen::Vector2d>>&
         image_id_to_keypoints,
-    const TrackEstablishmentOptions& options,
-    const MatchPredicate& ignore_match = MatchPredicate());
-
-// Options for ``SubsampleTracks``.
-struct TrackSubsampleOptions {
-  // Lower bound on track length (``Track::Length()``). Tracks below this
-  // are dropped.
-  int min_num_views_per_track = 3;
-  // Upper bound on track length (``Track::Length()``). Tracks above this
-  // are dropped.
-  int max_num_views_per_track = std::numeric_limits<int>::max();
-  // Greedy quota target: per-image counter that throttles selection
-  // once an image has accumulated this many tracks. ``INT_MAX`` (the
-  // default) makes the subsample a near-no-op.
-  int required_tracks_per_view = std::numeric_limits<int>::max();
-  // Hard cap on selected track count. When the count exceeds this the
-  // greedy walk stops.
-  int max_num_tracks = std::numeric_limits<int>::max();
-};
-
-// Greedy length-sorted subsample. Walks tracks in descending
-// ``Track::Length()`` order; for each, increments per-image counters
-// for every observation regardless of whether the track is kept, and
-// inserts the track if any observation's pre-increment count was within
-// the ``required_tracks_per_view`` quota. Returns the selected subset.
-std::unordered_map<point3D_t, Point3D> SubsampleTracks(
-    const TrackSubsampleOptions& options,
-    const std::unordered_set<image_t>& registered_image_ids,
-    const std::unordered_map<point3D_t, Point3D>& tracks_full);
+    const TrackEstablishmentOptions& options);
 
 }  // namespace colmap

@@ -41,8 +41,7 @@ Image::Image()
       num_points3D_(0) {}
 
 Image::Image(const Image& other)
-    : is_registered(other.is_registered),
-      features(other.features),
+    : features(other.features),
       features_undist(other.features_undist),
       angular_stddevs(other.angular_stddevs),
       angular_cholesky_xy(other.angular_cholesky_xy),
@@ -79,7 +78,6 @@ Image& Image::operator=(const Image& other) {
     points2D_ = other.Points2D();
     pixel_cholesky_xy_ = other.PixelCholeskyXY();
     // Public data members.
-    is_registered = other.is_registered;
     features = other.features;
     features_undist = other.features_undist;
     angular_stddevs = other.angular_stddevs;

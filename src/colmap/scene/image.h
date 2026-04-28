@@ -169,15 +169,11 @@ class Image {
   // (L00, L10, L11) for lower triangular 2x2: L * L^T = Sigma^-1.
   std::vector<Eigen::Vector3d> angular_cholesky_xy;
 
-  // --- Pose / registration / features (override-style fields) ---
+  // --- Pose / features (override-style fields) ---
   // Direct cam_from_world override. Independent of the Frame-derived
   // CamFromWorld() method; read/written by the standalone pipeline.
   // Default = identity.
   Rigid3d cam_from_world;
-
-  // Whether this image is currently registered (i.e. has a valid pose).
-  // Set by the pipeline; default false.
-  bool is_registered = false;
 
   // 2D keypoints (xy) for this image. Distinct from points2D_ (which is
   // colmap's Point2D struct list with point3D_id linkage). The standalone

@@ -25,7 +25,6 @@ void BindPoint3D(py::module& m) {
       .def_readwrite("color", &Point3D::color)
       .def_readwrite("error", &Point3D::error)
       .def_readwrite("track", &Point3D::track)
-      .def_readwrite("is_initialized", &Point3D::is_initialized)
       .def(
           "has_error", &Point3D::HasError, "Check if error has been computed.");
   MakeDataclass(PyPoint3D);
