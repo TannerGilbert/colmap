@@ -668,18 +668,12 @@ void RotationAveragingProblem::ApplyResultsToReconstruction(
 }
 
 bool RotationAveragingSolver::Solve(RotationAveragingProblem& problem) {
-  // Seed the global PRNG once per solve. ComputeResiduals' boundary
-  // jitter consumer (RandomUniformReal) advances naturally across
-  // iterations from this seed; resetting per-iteration would replay
-  // the identical jitter sequence and break IRLS convergence.
+  // Seed PRNG once (not per-iteration) so jitter sequence advances naturally.
   if (options_.random_seed >= 0) {
     SetPRNGSeed(static_cast<unsigned>(options_.random_seed));
   }
 
-  // Video-Ceres path: mutually exclusive with use_gravity. Replaces
-  // L1+IRLS with a Ceres optimization over per-frame 3-DOF angle-axis
-  // blocks. The LC-penalty MST initialization (also gated on
-  // use_video_constraints) runs before this solve.
+  // Video-Ceres path (mutually exclusive with use_gravity).
   if (options_.use_video_constraints && !options_.use_gravity) {
     VLOG(2) << "Solving video-aware Ceres rotation averaging";
     return SolveCeres(problem);
@@ -850,9 +844,7 @@ bool RotationAveragingSolver::SolveIRLS(RotationAveragingProblem& problem) {
     // Solve the least squares problem.
     step.setZero();
     step = llt.solve(at_weight * problem.Residuals());
-    // Mirror the L1 path's NaN guard (line 755). Without this, a singular
-    // pose-graph silently corrupts cams_from_world via UpdateState and
-    // SolveIRLS returns true with garbage residuals next iteration.
+    // NaN guard: singular pose-graph corrupts cams_from_world via UpdateState.
     if (step.array().isNaN().any()) {
       LOG(ERROR) << "IRLS step is NaN at iteration " << iteration;
       return false;
@@ -873,13 +865,8 @@ bool RotationAveragingSolver::SolveIRLS(RotationAveragingProblem& problem) {
   return true;
 }
 
-// Replaces L1+IRLS with a Ceres optimization over per-frame 3-DOF
-// angle-axis blocks. Activated by use_video_constraints (and gated to
-// !use_gravity in Solve). Each pair's residual is a relative-rotation
-// error wrapped in Huber (tracking-dominated) or Cauchy (LC-dominated)
-// loss. Initialized rotations come from the LC-penalty MST (also gated
-// on use_video_constraints) or the L1+IRLS warm-start if MST init was
-// skipped.
+// Ceres solve over per-frame 3-DOF angle-axis: Huber for tracking pairs,
+// Cauchy for LC pairs. Requires CorrespondenceGraph for LC classification.
 bool RotationAveragingSolver::SolveCeres(RotationAveragingProblem& problem) {
   THROW_CHECK(!options_.use_gravity)
       << "SolveCeres is gated on !use_gravity; gravity-aware video-Ceres "

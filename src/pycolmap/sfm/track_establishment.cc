@@ -1,6 +1,5 @@
-// Pycolmap binding for the LC-aware track-establishment +
-// subsample free functions in
-// ``colmap/sfm/track_establishment.{h,cc}``.
+// Binding for EstablishTracksFromCorrGraph, AppendLoopClosureObservations,
+// and SubsampleTracks.
 
 #include "colmap/scene/correspondence_graph.h"
 #include "colmap/scene/image.h"

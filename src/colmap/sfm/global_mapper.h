@@ -72,17 +72,10 @@ struct GlobalMapperOptions {
   int track_max_num_views_per_track = std::numeric_limits<int>::max();
   // Hard cap on the number of tracks kept after subsampling.
   int track_max_num_tracks = std::numeric_limits<int>::max();
-  // If true, AppendLoopClosureObservations runs after EstablishTracks to
-  // populate Track::lc_elements from inliers flagged as LC observations
-  // (CorrespondenceGraph::ImagePair::are_lc). When enabled the helper-
-  // side greedy subsample is bypassed (track_required_tracks_per_view is
-  // forced to INT_MAX); call SubsampleTracksForProblem afterwards if a
-  // post-LC subsample is desired. Default off (vanilla colmap behavior).
+  // Append LC observations to tracks after establishment. Bypasses
+  // helper-side subsample; call SubsampleTracksForProblem after.
   bool track_lc_second_pass = false;
-  // If true, SubsampleTracksForProblem drops 2-view tracks unless both
-  // observations satisfy
-  // ``image.depth_prior_validity[idx] && image.depth_priors[idx] > 1e-6``.
-  // Tracks with three or more views bypass the gate.
+  // Drop 2-view tracks without valid depth priors on both observations.
   bool track_two_view_depth_gate = false;
 
   // Thresholds for each component.
@@ -131,12 +124,7 @@ class GlobalMapper {
   // Establish tracks from feature matches.
   void EstablishTracks(const GlobalMapperOptions& options);
 
-  // Greedy length-sorted subsample of the current reconstruction's
-  // tracks, with optional 2-view depth-validity gate. Only meaningful
-  // after ``EstablishTracks`` has populated ``reconstruction_->Points3D()``.
-  // Reads the ``track_max_num_views_per_track``, ``track_max_num_tracks``,
-  // ``track_required_tracks_per_view``, ``track_min_num_views_per_track``,
-  // and ``track_two_view_depth_gate`` fields of ``options``.
+  // Greedy length-sorted subsample with optional 2-view depth gate.
   void SubsampleTracksForProblem(const GlobalMapperOptions& options);
 
   // Estimate global camera positions.
