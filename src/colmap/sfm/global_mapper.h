@@ -36,7 +36,7 @@ struct GlobalMapperOptions {
     options.min_track_length = 3;
     options.print_summary = false;
     if (options.ceres) {
-      options.ceres->loss_function_type =
+      options.ceres->main_loss.type =
           CeresBundleAdjustmentOptions::LossFunctionType::HUBER;
       options.ceres->use_gpu = true;
       // TODO: Investigate whether disabling auto solver selection and using
@@ -66,6 +66,11 @@ struct GlobalMapperOptions {
   int track_required_tracks_per_view = std::numeric_limits<int>::max();
   // Minimum number of views per track.
   int track_min_num_views_per_track = 3;
+  // Upper bound on track length. Tracks above this are dropped during
+  // SubsampleTracksForProblem.
+  int track_max_num_views_per_track = std::numeric_limits<int>::max();
+  // Hard cap on the number of tracks kept after subsampling.
+  int track_max_num_tracks = std::numeric_limits<int>::max();
 
   // Thresholds for each component.
   double max_angular_reproj_error_deg = 1.;   // for global positioning
@@ -112,6 +117,14 @@ class GlobalMapper {
 
   // Establish tracks from feature matches.
   void EstablishTracks(const GlobalMapperOptions& options);
+
+  // Greedy length-sorted subsample of the current reconstruction's
+  // tracks. Only meaningful after ``EstablishTracks`` has populated
+  // ``reconstruction_->Points3D()``. Reads the
+  // ``track_max_num_views_per_track``, ``track_max_num_tracks``,
+  // ``track_required_tracks_per_view``, and
+  // ``track_min_num_views_per_track`` fields of ``options``.
+  void SubsampleTracksForProblem(const GlobalMapperOptions& options);
 
   // Estimate global camera positions.
   bool GlobalPositioning(const GlobalPositionerOptions& options,
