@@ -444,13 +444,10 @@ void RotationEstimator::InitializeFromMaximumSpanningTree(
   std::queue<image_t> indexes;
   indexes.push(root);
 
-  // Seed the root from its current reconstruction pose so the BFS
-  // propagates relative rotations on top of the prior root frame
-  // instead of identity. Without this, every descendant is rotated by
-  // R_root^-1 relative to the prior gauge, which can shift IRLS
-  // weights through the ``max_rotation_error_deg`` filter.
   std::unordered_map<image_t, Rigid3d> cams_from_world;
-  cams_from_world[root] = reconstruction.Image(root).CamFromWorld();
+  const auto& root_image = reconstruction.Image(root);
+  cams_from_world[root] =
+      root_image.HasPose() ? root_image.CamFromWorld() : Rigid3d();
   while (!indexes.empty()) {
     image_t curr = indexes.front();
     indexes.pop();
