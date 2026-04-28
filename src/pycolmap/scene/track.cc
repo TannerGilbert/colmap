@@ -72,6 +72,7 @@ void BindTrack(py::module& m) {
            &Track::Reserve,
            "num_elements"_a,
            "Reserve capacity for elements.")
-      .def("compress", &Track::Compress, "Shrink capacity to fit size.");
+      .def("compress", &Track::Compress, "Shrink capacity to fit size.")
+      .def_readwrite("lc_elements", &Track::lc_elements);
   MakeDataclass(PyTrack);
 }

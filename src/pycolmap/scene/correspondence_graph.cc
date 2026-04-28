@@ -55,7 +55,9 @@ void BindCorrespondenceGraph(py::module& m) {
       .def_readwrite("weight", &CorrespondenceGraph::ImagePair::weight)
       .def_readwrite("matches", &CorrespondenceGraph::ImagePair::matches)
       .def_readwrite("inliers", &CorrespondenceGraph::ImagePair::inliers)
+      .def_readwrite("is_LC", &CorrespondenceGraph::ImagePair::is_LC)
       .def_readwrite("cov_t", &CorrespondenceGraph::ImagePair::cov_t)
+      .def_readwrite("are_lc", &CorrespondenceGraph::ImagePair::are_lc)
       .def_readwrite("num_matches",
                      &CorrespondenceGraph::ImagePair::num_matches)
       .def_readwrite("two_view_geometry",

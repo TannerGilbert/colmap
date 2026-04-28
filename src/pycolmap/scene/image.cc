@@ -152,6 +152,7 @@ void BindSceneImage(py::module& m) {
            &Image::HasPixelCovariances,
            "Check if pixel covariances are set and match points2D count.")
       .def_readwrite("angular_stddevs", &Image::angular_stddevs)
+      .def_readwrite("is_registered", &Image::is_registered)
       // FORK-REMOVAL TODO — `features` / `features_undist` are fork-only
       // fields. See `.claude/notes/glomap_audit/fork_removal_todo.md`.
       .def_readwrite("features", &Image::features)
