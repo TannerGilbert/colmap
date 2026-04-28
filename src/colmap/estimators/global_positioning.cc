@@ -118,6 +118,14 @@ void GlobalPositioner::InitializeRandomPositions(
       if (!image.HasPose()) continue;
       constrained_positions.insert(image.FrameId());
     }
+    if (options_.use_lc_observations) {
+      for (const auto& observation : point3D.track.lc_elements) {
+        if (!reconstruction.ExistsImage(observation.image_id)) continue;
+        const Image& image = reconstruction.Image(observation.image_id);
+        if (!image.HasPose()) continue;
+        constrained_positions.insert(image.FrameId());
+      }
+    }
   }
 
   // Initialize frame centers in temporary storage.

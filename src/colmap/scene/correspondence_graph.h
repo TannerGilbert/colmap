@@ -103,9 +103,6 @@ class CorrespondenceGraph {
     // Initialized to zero matrix to indicate it hasn't been computed yet.
     Eigen::Matrix3d cov_t = Eigen::Matrix3d::Zero();
 
-    // Indicator whether this is a loop closure.
-    bool is_LC = false;
-
     // All matches between the two images (not just inliers).
     // First column is feature index in image1, second column in image2.
     Eigen::MatrixXi matches;
