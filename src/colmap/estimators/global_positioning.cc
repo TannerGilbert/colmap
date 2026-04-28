@@ -84,13 +84,15 @@ void GlobalPositioner::SetupProblem(const PoseGraph& pose_graph,
   frame_centers_.clear();
   cams_in_rig_.clear();
 
-  // Allocate enough memory for the scales. One for each residual.
-  // Due to possibly invalid tracks, the actual number of residuals may be
-  // smaller.
+  // Reserve scales_ for both regular observations and lc_elements.
+  // Underestimating triggers ``vector::push_back`` reallocation mid-build,
+  // which invalidates the ``&scale`` data pointers that earlier residual
+  // blocks already stored.
   scales_.clear();
   size_t total_observations = 0;
   for (const auto& [point3D_id, point3D] : reconstruction.Points3D()) {
     total_observations += point3D.track.Length();
+    total_observations += point3D.track.lc_elements.size();
   }
   scales_.reserve(total_observations);
 }
@@ -158,6 +160,10 @@ void GlobalPositioner::AddPointToCameraConstraints(
 
     AddPoint3DToProblem(point3D_id, reconstruction);
   }
+  VLOG(2) << "GP: residual blocks=" << problem_->NumResidualBlocks()
+          << ", parameter blocks=" << problem_->NumParameterBlocks()
+          << ", scales=" << scales_.size()
+          << ", frame_centers=" << frame_centers_.size();
 }
 
 void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
@@ -173,105 +179,128 @@ void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
     point3D.xyz = options_.random_init_scale * RandVector3d(-1, 1);
   }
 
-  // For each view in the track add the point to camera correspondences.
+  // Walk regular elements then LC elements as separate passes — they
+  // share the residual layout but route to different cascade buckets.
   for (const auto& observation : point3D.track.Elements()) {
-    if (!reconstruction.ExistsImage(observation.image_id)) continue;
-
-    Image& image = reconstruction.Image(observation.image_id);
-    if (!image.HasPose()) continue;
-
-    const std::optional<Eigen::Vector2d> cam_point =
-        image.CameraPtr()->CamFromImg(
-            image.Point2D(observation.point2D_idx).xy);
-    if (!cam_point.has_value()) {
-      LOG(WARNING)
-          << "Ignoring feature because it failed to project: point3D_id="
-          << point3D_id << ", image_id=" << observation.image_id
-          << ", feature_id=" << observation.point2D_idx;
-      continue;
+    AddObservationToProblem(point3D_id,
+                            observation,
+                            /*is_lc_observation=*/false,
+                            random_initialization,
+                            reconstruction);
+  }
+  if (options_.use_lc_observations) {
+    for (const auto& observation : point3D.track.lc_elements) {
+      AddObservationToProblem(point3D_id,
+                              observation,
+                              /*is_lc_observation=*/true,
+                              random_initialization,
+                              reconstruction);
     }
+  }
+}
 
-    const Eigen::Vector3d cam_from_point3D_dir =
-        image.CamFromWorld().rotation().inverse() *
-        cam_point->homogeneous().normalized();
+void GlobalPositioner::AddObservationToProblem(point3D_t point3D_id,
+                                               const TrackElement& observation,
+                                               bool is_lc_observation,
+                                               bool random_initialization,
+                                               Reconstruction& reconstruction) {
+  Point3D& point3D = reconstruction.Point3D(point3D_id);
+  if (!reconstruction.ExistsImage(observation.image_id)) return;
 
-    CHECK_GE(scales_.capacity(), scales_.size())
-        << "Not enough capacity was reserved for the scales.";
-    double& scale = scales_.emplace_back(1);
+  Image& image = reconstruction.Image(observation.image_id);
+  if (!image.HasPose()) return;
 
-    if (!options_.generate_scales && random_initialization) {
-      const Eigen::Vector3d cam_from_point3D_translation =
-          point3D.xyz - frame_centers_[image.FrameId()];
-      scale = std::max(1e-5,
-                       cam_from_point3D_dir.dot(cam_from_point3D_translation) /
-                           cam_from_point3D_translation.squaredNorm());
-    }
+  const std::optional<Eigen::Vector2d> cam_point =
+      image.CameraPtr()->CamFromImg(
+          image.Point2D(observation.point2D_idx).xy);
+  if (!cam_point.has_value()) {
+    LOG(WARNING)
+        << "Ignoring feature because it failed to project: point3D_id="
+        << point3D_id << ", image_id=" << observation.image_id
+        << ", feature_id=" << observation.point2D_idx;
+    return;
+  }
 
-    // For calibrated and uncalibrated cameras, use different loss
-    // functions
-    // Down weight the uncalibrated cameras
-    Camera& camera = reconstruction.Camera(image.CameraId());
-    ceres::LossFunction* loss_function =
-        (camera.has_prior_focal_length)
-            ? loss_function_ptcam_calibrated_.get()
-            : loss_function_ptcam_uncalibrated_.get();
+  const Eigen::Vector3d cam_from_point3D_dir =
+      image.CamFromWorld().rotation().inverse() *
+      cam_point->homogeneous().normalized();
 
-    // If the image is not part of a camera rig, use the standard BATA error
-    if (image.IsRefInFrame()) {
+  CHECK_GE(scales_.capacity(), scales_.size())
+      << "Not enough capacity was reserved for the scales.";
+  double& scale = scales_.emplace_back(1);
+
+  if (!options_.generate_scales && random_initialization) {
+    const Eigen::Vector3d cam_from_point3D_translation =
+        point3D.xyz - frame_centers_[image.FrameId()];
+    scale = std::max(1e-5,
+                     cam_from_point3D_dir.dot(cam_from_point3D_translation) /
+                         cam_from_point3D_translation.squaredNorm());
+  }
+
+  // For calibrated and uncalibrated cameras, use different loss
+  // functions
+  // Down weight the uncalibrated cameras
+  Camera& camera = reconstruction.Camera(image.CameraId());
+  ceres::LossFunction* loss_function =
+      (camera.has_prior_focal_length)
+          ? loss_function_ptcam_calibrated_.get()
+          : loss_function_ptcam_uncalibrated_.get();
+
+  // If the image is not part of a camera rig, use the standard BATA error
+  if (image.IsRefInFrame()) {
+    ceres::CostFunction* cost_function =
+        BATAPairwiseDirectionCostFunctor::Create(cam_from_point3D_dir);
+
+    problem_->AddResidualBlock(cost_function,
+                               loss_function,
+                               frame_centers_[image.FrameId()].data(),
+                               point3D.xyz.data(),
+                               &scale);
+  } else {
+    // If the image is part of a camera rig, use the RigBATA error.
+
+    const rig_t rig_id = image.FramePtr()->RigId();
+    Rig& rig = reconstruction.Rig(rig_id);
+    Rigid3d& cam_from_rig = rig.SensorFromRig(image.CameraPtr()->SensorId());
+
+    if (!cam_from_rig.translation().hasNaN()) {
+      const Eigen::Vector3d cam_from_rig_dir =
+          image.CamFromWorld().rotation().inverse() *
+          cam_from_rig.translation();
+
       ceres::CostFunction* cost_function =
-          BATAPairwiseDirectionCostFunctor::Create(cam_from_point3D_dir);
+          RigBATAPairwiseDirectionConstantRigCostFunctor::Create(
+              cam_from_point3D_dir, cam_from_rig_dir);
 
       problem_->AddResidualBlock(cost_function,
                                  loss_function,
-                                 frame_centers_[image.FrameId()].data(),
                                  point3D.xyz.data(),
+                                 frame_centers_[image.FrameId()].data(),
                                  &scale);
     } else {
-      // If the image is part of a camera rig, use the RigBATA error.
-
-      const rig_t rig_id = image.FramePtr()->RigId();
-      Rig& rig = reconstruction.Rig(rig_id);
-      Rigid3d& cam_from_rig = rig.SensorFromRig(image.CameraPtr()->SensorId());
-
-      if (!cam_from_rig.translation().hasNaN()) {
-        const Eigen::Vector3d cam_from_rig_dir =
-            image.CamFromWorld().rotation().inverse() *
-            cam_from_rig.translation();
-
-        ceres::CostFunction* cost_function =
-            RigBATAPairwiseDirectionConstantRigCostFunctor::Create(
-                cam_from_point3D_dir, cam_from_rig_dir);
-
-        problem_->AddResidualBlock(cost_function,
-                                   loss_function,
-                                   point3D.xyz.data(),
-                                   frame_centers_[image.FrameId()].data(),
-                                   &scale);
-      } else {
-        // If the cam_from_rig contains nan values, it needs to be re-estimated.
-        // Initialize cams_in_rig_ if not already done.
-        const sensor_t sensor_id = image.CameraPtr()->SensorId();
-        if (cams_in_rig_.find(sensor_id) == cams_in_rig_.end()) {
-          // Will be initialized to random values in ParameterizeVariables().
-          cams_in_rig_[sensor_id] = Eigen::Vector3d::Zero();
-        }
-
-        ceres::CostFunction* cost_function =
-            RigBATAPairwiseDirectionCostFunctor::Create(
-                cam_from_point3D_dir,
-                image.FramePtr()->RigFromWorld().rotation());
-
-        problem_->AddResidualBlock(cost_function,
-                                   loss_function,
-                                   point3D.xyz.data(),
-                                   frame_centers_[image.FrameId()].data(),
-                                   cams_in_rig_[sensor_id].data(),
-                                   &scale);
+      // If the cam_from_rig contains nan values, it needs to be re-estimated.
+      // Initialize cams_in_rig_ if not already done.
+      const sensor_t sensor_id = image.CameraPtr()->SensorId();
+      if (cams_in_rig_.find(sensor_id) == cams_in_rig_.end()) {
+        // Will be initialized to random values in ParameterizeVariables().
+        cams_in_rig_[sensor_id] = Eigen::Vector3d::Zero();
       }
-    }
 
-    problem_->SetParameterLowerBound(&scale, 0, 1e-5);
+      ceres::CostFunction* cost_function =
+          RigBATAPairwiseDirectionCostFunctor::Create(
+              cam_from_point3D_dir,
+              image.FramePtr()->RigFromWorld().rotation());
+
+      problem_->AddResidualBlock(cost_function,
+                                 loss_function,
+                                 point3D.xyz.data(),
+                                 frame_centers_[image.FrameId()].data(),
+                                 cams_in_rig_[sensor_id].data(),
+                                 &scale);
+    }
   }
+
+  problem_->SetParameterLowerBound(&scale, 0, 1e-5);
 }
 
 void GlobalPositioner::AddCamerasAndPointsToParameterGroups(

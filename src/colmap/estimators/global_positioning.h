@@ -4,8 +4,10 @@
 #include "colmap/scene/pose_graph.h"
 #include "colmap/scene/reconstruction.h"
 
+#include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include <ceres/ceres.h>
 
@@ -47,14 +49,21 @@ struct GlobalPositionerOptions {
   // focal-length prior.
   bool apply_uncalibrated_loss_downweight = true;
 
+  // The options for the solver
+  ceres::Solver::Options solver_options;
+
+  // Include loop-closure observations in point3D problems.
+  bool use_lc_observations = false;
+
   // Skip random initialization and reuse existing positions/points.
   bool use_init = false;
 
   // Cube half-extent for random initialization of positions and points.
   double random_init_scale = 100.0;
 
-  // The options for the solver
-  ceres::Solver::Options solver_options;
+  // Per-observation loss configs for LC routing.
+  LossConfig loss_lc_geometry;
+  LossConfig loss_lc_depth;
 
   GlobalPositionerOptions() {
     solver_options.num_threads = -1;
@@ -93,6 +102,15 @@ class GlobalPositioner {
   // Add a single point3D to the problem
   void AddPoint3DToProblem(point3D_t point3D_id,
                            Reconstruction& reconstruction);
+
+  // Add a single observation (regular or LC) for one point3D. The
+  // ``is_lc_observation`` flag selects which loss bucket the cascade
+  // routes to.
+  void AddObservationToProblem(point3D_t point3D_id,
+                               const TrackElement& observation,
+                               bool is_lc_observation,
+                               bool random_initialization,
+                               Reconstruction& reconstruction);
 
   // Set the parameter groups
   void AddCamerasAndPointsToParameterGroups(Reconstruction& reconstruction);
