@@ -86,6 +86,9 @@ class UnionFind {
   // Access all elements and their parents in the union-find structure.
   const std::unordered_map<T, T>& Parents() const { return parent_; }
 
+  // Reset the structure to be empty.
+  void Clear() { parent_.clear(); }
+
  private:
   // Map to store the parent of each element.
   std::unordered_map<T, T> parent_;
