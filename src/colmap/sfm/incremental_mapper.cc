@@ -707,7 +707,7 @@ bool IncrementalMapper::RegisterNextStructureLessImage(const Options& options,
 
   BundleAdjustmentOptions abs_pose_refinement_options;
   if (abs_pose_refinement_options.ceres) {
-    abs_pose_refinement_options.ceres->loss_function_type =
+    abs_pose_refinement_options.ceres->main_loss.type =
         CeresBundleAdjustmentOptions::LossFunctionType::CAUCHY;
     abs_pose_refinement_options.ceres->solver_options.logging_type =
         ceres::LoggingType::SILENT;
@@ -1129,10 +1129,10 @@ bool IncrementalMapper::AdjustGlobalBundle(
   } else {
     PosePriorBundleAdjustmentOptions prior_options;
     if (options.use_robust_loss_on_prior_position) {
-      prior_options.ceres->prior_position_loss_function_type =
+      prior_options.ceres->prior_position_loss.type =
           CeresBundleAdjustmentOptions::LossFunctionType::CAUCHY;
     }
-    prior_options.ceres->prior_position_loss_scale =
+    prior_options.ceres->prior_position_loss.scale =
         options.prior_position_loss_scale;
     prior_options.alignment_ransac_options.random_seed = options.random_seed;
     bundle_adjuster =
@@ -1203,7 +1203,7 @@ void IncrementalMapper::IterativeLocalRefinement(
     }
     // Only use robust cost function for first iteration.
     if (custom_ba_options.ceres) {
-      custom_ba_options.ceres->loss_function_type =
+      custom_ba_options.ceres->main_loss.type =
           CeresBundleAdjustmentOptions::LossFunctionType::TRIVIAL;
     }
   }

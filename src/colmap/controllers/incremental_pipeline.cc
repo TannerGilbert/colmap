@@ -178,8 +178,8 @@ BundleAdjustmentOptions IncrementalPipelineOptions::LocalBundleAdjustment()
 #endif  // CERES_VERSION_MAJOR
     options.ceres->min_num_residuals_for_cpu_multi_threading =
         ba_min_num_residuals_for_cpu_multi_threading;
-    options.ceres->loss_function_scale = 1.0;
-    options.ceres->loss_function_type =
+    options.ceres->main_loss.scale = 1.0;
+    options.ceres->main_loss.type =
         CeresBundleAdjustmentOptions::LossFunctionType::SOFT_L1;
     options.ceres->use_gpu = ba_use_gpu;
     options.ceres->gpu_index = ba_gpu_index;
@@ -215,7 +215,7 @@ BundleAdjustmentOptions IncrementalPipelineOptions::GlobalBundleAdjustment()
 #endif  // CERES_VERSION_MAJOR
     options.ceres->min_num_residuals_for_cpu_multi_threading =
         ba_min_num_residuals_for_cpu_multi_threading;
-    options.ceres->loss_function_type =
+    options.ceres->main_loss.type =
         CeresBundleAdjustmentOptions::LossFunctionType::TRIVIAL;
     options.ceres->use_gpu = ba_use_gpu;
     options.ceres->gpu_index = ba_gpu_index;

@@ -730,7 +730,7 @@ void OptionManager::AddGlobalMapperOptions() {
                    &global_mapper->mapper.global_positioning.optimize_scales);
   AddDefaultOption(
       "GlobalMapper.gp_loss_function_scale",
-      &global_mapper->mapper.global_positioning.loss_function_scale);
+      &global_mapper->mapper.global_positioning.main_loss.scale);
   AddDefaultOption("GlobalMapper.gp_max_num_iterations",
                    &global_mapper->mapper.global_positioning.solver_options
                         .max_num_iterations);
@@ -762,7 +762,7 @@ void OptionManager::AddGlobalMapperOptions() {
                    &global_mapper->mapper.bundle_adjustment.ceres->gpu_index);
   AddDefaultOption(
       "GlobalMapper.ba_ceres_loss_function_scale",
-      &global_mapper->mapper.bundle_adjustment.ceres->loss_function_scale);
+      &global_mapper->mapper.bundle_adjustment.ceres->main_loss.scale);
   AddDefaultOption("GlobalMapper.ba_ceres_max_num_iterations",
                    &global_mapper->mapper.bundle_adjustment.ceres
                         ->solver_options.max_num_iterations);

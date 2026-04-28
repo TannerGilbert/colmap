@@ -63,14 +63,14 @@ TEST(PosePriorBundleAdjustmentOptions, Copy) {
   PosePriorBundleAdjustmentOptions options;
   options.prior_position_fallback_stddev = 2.5;
   options.alignment_ransac_options.max_error = 1.0;
-  options.ceres->prior_position_loss_scale = 0.42;
+  options.ceres->prior_position_loss.scale = 0.42;
 
   PosePriorBundleAdjustmentOptions copy = options;
 
   // Verify fields are copied
   EXPECT_EQ(copy.prior_position_fallback_stddev, 2.5);
   EXPECT_EQ(copy.alignment_ransac_options.max_error, 1.0);
-  EXPECT_EQ(copy.ceres->prior_position_loss_scale, 0.42);
+  EXPECT_EQ(copy.ceres->prior_position_loss.scale, 0.42);
 
   // Verify deep copy of shared_ptr (different pointer instances)
   EXPECT_NE(options.ceres.get(), copy.ceres.get());
