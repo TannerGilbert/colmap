@@ -31,6 +31,7 @@
 
 #include "colmap/geometry/triangulation.h"
 #include "colmap/math/math.h"
+#include "colmap/scene/reconstruction.h"
 #include "colmap/util/logging.h"
 
 namespace colmap {
@@ -38,19 +39,17 @@ namespace {
 constexpr double EPS = 1e-12;
 }  // namespace
 
-int FilterTracksByAngle(
-    CorrespondenceGraph& /*view_graph*/,
-    const std::unordered_map<camera_t, Camera>& cameras,
-    const std::unordered_map<image_t, Image>& images,
-    std::unordered_map<point3D_t, Point3D>& tracks,
-    double max_angle_error_deg) {
+int FilterTracksByAngle(CorrespondenceGraph& /*view_graph*/,
+                        const Reconstruction& rec,
+                        std::unordered_map<point3D_t, Point3D>& tracks,
+                        double max_angle_error_deg) {
   int counter = 0;
   const double thres = std::cos(DegToRad(max_angle_error_deg));
   const double thres_uncalib = std::cos(DegToRad(max_angle_error_deg * 2));
   for (auto& [track_id, point3D] : tracks) {
     std::vector<TrackElement> elements_new;
     for (const auto& el : point3D.track.Elements()) {
-      const Image& image = images.at(el.image_id);
+      const Image& image = rec.Image(el.image_id);
       const Eigen::Vector3d& feature_undist =
           image.features_undist.at(el.point2D_idx);
       Eigen::Vector3d pt_calc = image.cam_from_world * point3D.xyz;
@@ -58,8 +57,8 @@ int FilterTracksByAngle(
 
       pt_calc = pt_calc.normalized();
       const double thres_cam =
-          (cameras.at(image.CameraId()).has_prior_focal_length) ? thres
-                                                                : thres_uncalib;
+          rec.Camera(image.CameraId()).has_prior_focal_length ? thres
+                                                              : thres_uncalib;
 
       if (pt_calc.dot(feature_undist) > thres_cam) {
         elements_new.emplace_back(el);
@@ -75,17 +74,12 @@ int FilterTracksByAngle(
   return counter;
 }
 
-int FilterTrackTriangulationAngle(
-    CorrespondenceGraph& /*view_graph*/,
-    const std::unordered_map<image_t, Image>& images,
-    std::unordered_map<point3D_t, Point3D>& tracks,
-    double min_angle_deg) {
+int FilterTrackTriangulationAngle(CorrespondenceGraph& /*view_graph*/,
+                                  const Reconstruction& rec,
+                                  std::unordered_map<point3D_t, Point3D>& tracks,
+                                  double min_angle_deg) {
   int counter = 0;
   const double min_angle_rad = DegToRad(min_angle_deg);
-  // Cache per-image projection centers; native ``Image::ProjectionCenter()``
-  // goes through ``frame_ptr_`` which the dict-of-images state model
-  // doesn't populate, so we read ``cam_from_world`` directly. Same
-  // idiom as ``FilterTracksByAngle`` above.
   std::unordered_map<image_t, Eigen::Vector3d> proj_centers;
   for (auto& [track_id, point3D] : tracks) {
     bool keep_point = false;
@@ -94,7 +88,7 @@ int FilterTrackTriangulationAngle(
       const image_t image_id1 = elements[i1].image_id;
       auto it1 = proj_centers.find(image_id1);
       if (it1 == proj_centers.end()) {
-        const Rigid3d& cfw = images.at(image_id1).cam_from_world;
+        const Rigid3d& cfw = rec.Image(image_id1).cam_from_world;
         it1 = proj_centers
                   .emplace(image_id1,
                            cfw.rotation().inverse() * -cfw.translation())

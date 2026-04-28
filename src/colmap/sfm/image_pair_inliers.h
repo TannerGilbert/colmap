@@ -31,12 +31,10 @@
 
 #include "colmap/geometry/rigid3.h"
 #include "colmap/math/math.h"
-#include "colmap/scene/camera.h"
 #include "colmap/scene/correspondence_graph.h"
-#include "colmap/scene/image.h"
+#include "colmap/scene/reconstruction.h"
 #include "colmap/util/logging.h"
 #include "colmap/util/types.h"
-#include <unordered_map>
 
 namespace colmap {
 
@@ -51,11 +49,9 @@ struct InlierThresholdOptions {
   double min_angle_from_epipole = 3.;
 };
 
-void ImagePairsInlierCount(
-    CorrespondenceGraph& correspondence_graph,
-    const std::unordered_map<camera_t, Camera>& cameras,
-    const std::unordered_map<image_t, Image>& images,
-    const InlierThresholdOptions& options,
-    bool clean_inliers);
+void ImagePairsInlierCount(CorrespondenceGraph& correspondence_graph,
+                           const Reconstruction& rec,
+                           const InlierThresholdOptions& options,
+                           bool clean_inliers);
 
 }  // namespace colmap

@@ -29,10 +29,9 @@
 
 #pragma once
 
-#include "colmap/scene/camera.h"
 #include "colmap/scene/correspondence_graph.h"
-#include "colmap/scene/image.h"
 #include "colmap/scene/point3d.h"
+#include "colmap/scene/reconstruction.h"
 #include "colmap/util/types.h"
 
 #include <unordered_map>
@@ -46,23 +45,20 @@ namespace colmap {
 // threshold ``cos(2 * max_angle_error_deg)`` since their focal is still
 // being optimized. Mutates ``tracks`` in place via ``Track::SetElements``;
 // returns the count of tracks whose element list shrank.
-int FilterTracksByAngle(
-    CorrespondenceGraph& view_graph,
-    const std::unordered_map<camera_t, Camera>& cameras,
-    const std::unordered_map<image_t, Image>& images,
-    std::unordered_map<point3D_t, Point3D>& tracks,
-    double max_angle_error_deg = 1.);
+int FilterTracksByAngle(CorrespondenceGraph& view_graph,
+                        const Reconstruction& rec,
+                        std::unordered_map<point3D_t, Point3D>& tracks,
+                        double max_angle_error_deg = 1.);
 
 // Drop tracks whose maximum pairwise triangulation angle is below the
 // threshold. Mirrors
 // ``ObservationManager::FindPoints3DWithSmallTriangulationAngle`` but
-// operates on the dict-of-tracks state used here instead of a
-// ``Reconstruction``; shares the angle math via
+// operates on the dict-of-tracks state; shares the angle math via
 // ``CalculateTriangulationAngle``. Marks dropped tracks with
 // ``Track::SetElements({})``; returns the dropped count.
 int FilterTrackTriangulationAngle(
     CorrespondenceGraph& view_graph,
-    const std::unordered_map<image_t, Image>& images,
+    const Reconstruction& rec,
     std::unordered_map<point3D_t, Point3D>& tracks,
     double min_angle_deg = 1.);
 

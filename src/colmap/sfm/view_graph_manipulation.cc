@@ -31,6 +31,7 @@
 
 #include "colmap/estimators/two_view_geometry.h"
 #include "colmap/geometry/essential_matrix.h"
+#include "colmap/scene/reconstruction.h"
 #include "colmap/util/logging.h"
 #include "colmap/util/threading.h"
 
@@ -41,19 +42,17 @@ constexpr double kTranslationNormEps = 1e-12;
 
 }  // namespace
 
-void UpdateImagePairsConfig(
-    CorrespondenceGraph& view_graph,
-    const std::unordered_map<camera_t, Camera>& cameras,
-    const std::unordered_map<image_t, Image>& images) {
+void UpdateImagePairsConfig(CorrespondenceGraph& view_graph,
+                            const Reconstruction& rec) {
   // For each camera, count (total_pairs_involved, calibrated_pairs_involved)
   // restricted to pairs where both cameras have prior focal lengths.
   std::unordered_map<camera_t, std::pair<int, int>> camera_counter;
   for (auto& [pair_id, image_pair] : view_graph.MutableImagePairs()) {
     if (!image_pair.is_valid) continue;
-    const camera_t cid1 = images.at(image_pair.image_id1).CameraId();
-    const camera_t cid2 = images.at(image_pair.image_id2).CameraId();
-    const Camera& c1 = cameras.at(cid1);
-    const Camera& c2 = cameras.at(cid2);
+    const camera_t cid1 = rec.Image(image_pair.image_id1).CameraId();
+    const camera_t cid2 = rec.Image(image_pair.image_id2).CameraId();
+    const Camera& c1 = rec.Camera(cid1);
+    const Camera& c2 = rec.Camera(cid2);
     if (!c1.has_prior_focal_length || !c2.has_prior_focal_length) continue;
 
     const int cfg = image_pair.two_view_geometry.config;
@@ -83,15 +82,15 @@ void UpdateImagePairsConfig(
     auto& tvg = image_pair.two_view_geometry;
     if (tvg.config != TwoViewGeometry::UNCALIBRATED) continue;
 
-    const camera_t cid1 = images.at(image_pair.image_id1).CameraId();
-    const camera_t cid2 = images.at(image_pair.image_id2).CameraId();
+    const camera_t cid1 = rec.Image(image_pair.image_id1).CameraId();
+    const camera_t cid2 = rec.Image(image_pair.image_id2).CameraId();
     if (!camera_validity[cid1] || !camera_validity[cid2]) continue;
 
     tvg.config = TwoViewGeometry::CALIBRATED;
     THROW_CHECK(tvg.cam2_from_cam1.has_value())
         << "UNCALIBRATED pair upgraded to CALIBRATED must have cam2_from_cam1";
-    const Camera& c1 = cameras.at(cid1);
-    const Camera& c2 = cameras.at(cid2);
+    const Camera& c1 = rec.Camera(cid1);
+    const Camera& c2 = rec.Camera(cid2);
     tvg.F = FundamentalFromEssentialMatrix(
         c2.CalibrationMatrix(),
         EssentialMatrixFromPose(*tvg.cam2_from_cam1),
@@ -100,16 +99,15 @@ void UpdateImagePairsConfig(
 }
 
 void DecomposeRelPose(CorrespondenceGraph& view_graph,
-                      std::unordered_map<camera_t, Camera>& cameras,
-                      std::unordered_map<image_t, Image>& images) {
+                      const Reconstruction& rec) {
   // Collect pairs to decompose: valid + both cameras have prior focal length.
   std::vector<image_pair_t> pair_ids;
   for (auto& [pair_id, image_pair] : view_graph.MutableImagePairs()) {
     if (!image_pair.is_valid) continue;
-    const camera_t cid1 = images.at(image_pair.image_id1).CameraId();
-    const camera_t cid2 = images.at(image_pair.image_id2).CameraId();
-    if (!cameras.at(cid1).has_prior_focal_length ||
-        !cameras.at(cid2).has_prior_focal_length)
+    const camera_t cid1 = rec.Image(image_pair.image_id1).CameraId();
+    const camera_t cid2 = rec.Image(image_pair.image_id2).CameraId();
+    if (!rec.Camera(cid1).has_prior_focal_length ||
+        !rec.Camera(cid2).has_prior_focal_length)
       continue;
     pair_ids.push_back(pair_id);
   }
@@ -121,10 +119,10 @@ void DecomposeRelPose(CorrespondenceGraph& view_graph,
       auto& image_pair = view_graph.MutableImagePairs().at(pid);
       const image_t iid1 = image_pair.image_id1;
       const image_t iid2 = image_pair.image_id2;
-      const camera_t cid1 = images.at(iid1).CameraId();
-      const camera_t cid2 = images.at(iid2).CameraId();
-      const Camera& c1 = cameras.at(cid1);
-      const Camera& c2 = cameras.at(cid2);
+      const camera_t cid1 = rec.Image(iid1).CameraId();
+      const camera_t cid2 = rec.Image(iid2).CameraId();
+      const Camera& c1 = rec.Camera(cid1);
+      const Camera& c2 = rec.Camera(cid2);
 
       // Snapshot original config before EstimateTwoViewGeometryPose mutates it.
       const int original_config = image_pair.two_view_geometry.config;
@@ -132,9 +130,9 @@ void DecomposeRelPose(CorrespondenceGraph& view_graph,
       // Estimator mutates two_view_geometry in place: re-fits cam2_from_cam1
       // (and may revise config) using the existing E/F/H from the pair.
       EstimateTwoViewGeometryPose(c1,
-                                  images.at(iid1).features,
+                                  rec.Image(iid1).features,
                                   c2,
-                                  images.at(iid2).features,
+                                  rec.Image(iid2).features,
                                   &image_pair.two_view_geometry);
 
       // PLANAR pairs with prior calibration get force-upgraded to CALIBRATED.

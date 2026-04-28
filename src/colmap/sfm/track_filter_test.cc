@@ -35,6 +35,7 @@
 #include "colmap/scene/correspondence_graph.h"
 #include "colmap/scene/image.h"
 #include "colmap/scene/point3d.h"
+#include "colmap/scene/reconstruction.h"
 #include "colmap/scene/track.h"
 #include "colmap/util/types.h"
 
@@ -58,19 +59,22 @@ Camera MakePinholeCamera(camera_t camera_id, bool has_prior) {
   return camera;
 }
 
-// Build an Image at world-position ``center`` looking down +Z (rotation =
-// identity for cam_from_world means world is identical to camera frame). Set
-// camera_id and reserve enough features_undist slots.
-Image MakeImage(image_t image_id,
-                camera_t camera_id,
-                const Rigid3d& cam_from_world,
-                size_t num_features) {
-  Image image;
-  image.SetImageId(image_id);
-  image.SetCameraId(camera_id);
-  image.cam_from_world = cam_from_world;
-  image.features_undist.assign(num_features, Eigen::Vector3d::UnitZ());
-  return image;
+// Build a Reconstruction with one camera and a list of (image_id,
+// cam_from_world, num_features) images.
+Reconstruction MakeRec(
+    const Camera& camera,
+    const std::vector<std::tuple<image_t, Rigid3d, size_t>>& img_specs) {
+  Reconstruction rec;
+  rec.AddCameraWithTrivialRig(camera);
+  for (const auto& [image_id, pose, num_features] : img_specs) {
+    Image image;
+    image.SetImageId(image_id);
+    image.SetCameraId(camera.camera_id);
+    image.features_undist.assign(num_features, Eigen::Vector3d::UnitZ());
+    image.cam_from_world = pose;
+    rec.AddImageWithTrivialFrame(std::move(image), pose);
+  }
+  return rec;
 }
 
 // Build a Point3D with track over (image_id, point2D_idx) entries.
@@ -91,33 +95,27 @@ Point3D MakePoint3D(const Eigen::Vector3d& xyz,
 // max_angle_error = 1deg should keep both observations.
 TEST(TrackFilter, FilterByAngle_AlignedRaysKept) {
   CorrespondenceGraph view_graph;
-  std::unordered_map<camera_t, Camera> cameras;
-  std::unordered_map<image_t, Image> images;
   std::unordered_map<point3D_t, Point3D> tracks;
 
-  cameras.emplace(1, MakePinholeCamera(1, /*has_prior=*/true));
+  Camera cam = MakePinholeCamera(1, /*has_prior=*/true);
 
-  // Camera 1 at origin, identity rotation.
-  Image img1 = MakeImage(1, 1, Rigid3d(), 1);
-  // Camera 2 at (1, 0, 0), identity rotation.
   Rigid3d cam2_from_world(Eigen::Quaterniond::Identity(),
                           Eigen::Vector3d(-1.0, 0.0, 0.0));
-  Image img2 = MakeImage(2, 1, cam2_from_world, 1);
+  Reconstruction rec =
+      MakeRec(cam, {{1, Rigid3d(), 1}, {2, cam2_from_world, 1}});
 
-  // Point at (0, 0, 5) in world.
   Eigen::Vector3d xyz(0.0, 0.0, 5.0);
 
   // Set features_undist to the normalized rays of the projection in each cam.
-  img1.features_undist[0] = (img1.cam_from_world * xyz).normalized();
-  img2.features_undist[0] = (img2.cam_from_world * xyz).normalized();
-
-  images.emplace(1, std::move(img1));
-  images.emplace(2, std::move(img2));
+  rec.Image(1).features_undist[0] =
+      (rec.Image(1).cam_from_world * xyz).normalized();
+  rec.Image(2).features_undist[0] =
+      (rec.Image(2).cam_from_world * xyz).normalized();
 
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
   const int touched = FilterTracksByAngle(
-      view_graph, cameras, images, tracks, /*max_angle_error=*/1.0);
+      view_graph, rec, tracks, /*max_angle_error=*/1.0);
   EXPECT_EQ(touched, 0);
   EXPECT_EQ(tracks.at(1).track.Length(), 2u);
 }
@@ -126,16 +124,13 @@ TEST(TrackFilter, FilterByAngle_AlignedRaysKept) {
 // for calibrated cameras => both observations dropped.
 TEST(TrackFilter, FilterByAngle_MisalignedRaysDropped) {
   CorrespondenceGraph view_graph;
-  std::unordered_map<camera_t, Camera> cameras;
-  std::unordered_map<image_t, Image> images;
   std::unordered_map<point3D_t, Point3D> tracks;
 
-  cameras.emplace(1, MakePinholeCamera(1, /*has_prior=*/true));
-
-  Image img1 = MakeImage(1, 1, Rigid3d(), 1);
+  Camera cam = MakePinholeCamera(1, /*has_prior=*/true);
   Rigid3d cam2_from_world(Eigen::Quaterniond::Identity(),
                           Eigen::Vector3d(-1.0, 0.0, 0.0));
-  Image img2 = MakeImage(2, 1, cam2_from_world, 1);
+  Reconstruction rec =
+      MakeRec(cam, {{1, Rigid3d(), 1}, {2, cam2_from_world, 1}});
 
   Eigen::Vector3d xyz(0.0, 0.0, 5.0);
 
@@ -143,16 +138,15 @@ TEST(TrackFilter, FilterByAngle_MisalignedRaysDropped) {
   // observed feature_undist that is 5deg off the ground-truth ray.
   const double angle_rad = DegToRad(5.0);
   Eigen::AngleAxisd tilt(angle_rad, Eigen::Vector3d::UnitY());
-  img1.features_undist[0] = (tilt * (img1.cam_from_world * xyz)).normalized();
-  img2.features_undist[0] = (tilt * (img2.cam_from_world * xyz)).normalized();
-
-  images.emplace(1, std::move(img1));
-  images.emplace(2, std::move(img2));
+  rec.Image(1).features_undist[0] =
+      (tilt * (rec.Image(1).cam_from_world * xyz)).normalized();
+  rec.Image(2).features_undist[0] =
+      (tilt * (rec.Image(2).cam_from_world * xyz)).normalized();
 
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
   const int touched = FilterTracksByAngle(
-      view_graph, cameras, images, tracks, /*max_angle_error=*/1.0);
+      view_graph, rec, tracks, /*max_angle_error=*/1.0);
   EXPECT_EQ(touched, 1);
   EXPECT_EQ(tracks.at(1).track.Length(), 0u);
 }
@@ -161,47 +155,40 @@ TEST(TrackFilter, FilterByAngle_MisalignedRaysDropped) {
 // 10deg => both observations kept.
 TEST(TrackFilter, FilterByAngle_UncalibratedCameraDoubleThreshold) {
   CorrespondenceGraph view_graph;
-  std::unordered_map<camera_t, Camera> cameras;
-  std::unordered_map<image_t, Image> images;
   std::unordered_map<point3D_t, Point3D> tracks;
 
   // Uncalibrated camera => threshold becomes 2 * max_angle_error.
-  cameras.emplace(1, MakePinholeCamera(1, /*has_prior=*/false));
-
-  Image img1 = MakeImage(1, 1, Rigid3d(), 1);
+  Camera cam_uncalib = MakePinholeCamera(1, /*has_prior=*/false);
   Rigid3d cam2_from_world(Eigen::Quaterniond::Identity(),
                           Eigen::Vector3d(-1.0, 0.0, 0.0));
-  Image img2 = MakeImage(2, 1, cam2_from_world, 1);
+  Reconstruction rec =
+      MakeRec(cam_uncalib, {{1, Rigid3d(), 1}, {2, cam2_from_world, 1}});
 
   Eigen::Vector3d xyz(0.0, 0.0, 5.0);
 
-  // 5deg misalignment is above 1deg (calibrated) but below 2deg ?? No: above
-  // 2deg too. Threshold is 2 * max_angle_error = 2 * 3deg = 6deg in this test.
-  // We use max_angle_error=3.0 so calibrated-thres=3deg (drop 5deg) but
-  // uncalib-thres=6deg (keep 5deg).
+  // 5deg misalignment is above 3deg (calibrated) but below 6deg (2x uncalib).
   const double angle_rad = DegToRad(5.0);
   Eigen::AngleAxisd tilt(angle_rad, Eigen::Vector3d::UnitY());
-  img1.features_undist[0] = (tilt * (img1.cam_from_world * xyz)).normalized();
-  img2.features_undist[0] = (tilt * (img2.cam_from_world * xyz)).normalized();
-
-  images.emplace(1, std::move(img1));
-  images.emplace(2, std::move(img2));
+  rec.Image(1).features_undist[0] =
+      (tilt * (rec.Image(1).cam_from_world * xyz)).normalized();
+  rec.Image(2).features_undist[0] =
+      (tilt * (rec.Image(2).cam_from_world * xyz)).normalized();
 
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
   const int touched = FilterTracksByAngle(
-      view_graph, cameras, images, tracks, /*max_angle_error=*/3.0);
+      view_graph, rec, tracks, /*max_angle_error=*/3.0);
   EXPECT_EQ(touched, 0);
   EXPECT_EQ(tracks.at(1).track.Length(), 2u);
 
   // Sanity: same setup, but now flip the camera to calibrated => 5deg drops.
-  std::unordered_map<camera_t, Camera> cameras_calib;
-  cameras_calib.emplace(1, MakePinholeCamera(1, /*has_prior=*/true));
+  Camera cam_calib = MakePinholeCamera(1, /*has_prior=*/true);
+  // Replace camera in rec.
+  rec.Camera(1) = cam_calib;
   std::unordered_map<point3D_t, Point3D> tracks_calib;
   tracks_calib.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
   const int touched_calib = FilterTracksByAngle(
-      view_graph, cameras_calib, images, tracks_calib,
-      /*max_angle_error=*/3.0);
+      view_graph, rec, tracks_calib, /*max_angle_error=*/3.0);
   EXPECT_EQ(touched_calib, 1);
   EXPECT_EQ(tracks_calib.at(1).track.Length(), 0u);
 }
@@ -211,34 +198,29 @@ TEST(TrackFilter, FilterByAngle_UncalibratedCameraDoubleThreshold) {
 // Verify only the behind-camera obs is dropped; valid one stays.
 TEST(TrackFilter, FilterByAngle_PointBehindCameraSkipped) {
   CorrespondenceGraph view_graph;
-  std::unordered_map<camera_t, Camera> cameras;
-  std::unordered_map<image_t, Image> images;
   std::unordered_map<point3D_t, Point3D> tracks;
 
-  cameras.emplace(1, MakePinholeCamera(1, /*has_prior=*/true));
+  Camera cam = MakePinholeCamera(1, /*has_prior=*/true);
 
-  // Image 1 looks +Z (point at z=5 is in front).
-  Image img1 = MakeImage(1, 1, Rigid3d(), 1);
   // Image 2 looks -Z by rotating 180deg around Y; same world point lands at
   // cam-frame z = -5 (behind camera).
   Eigen::Quaterniond q_flip(Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitY()));
   Rigid3d cam2_from_world(q_flip, Eigen::Vector3d::Zero());
-  Image img2 = MakeImage(2, 1, cam2_from_world, 1);
+  Reconstruction rec =
+      MakeRec(cam, {{1, Rigid3d(), 1}, {2, cam2_from_world, 1}});
 
   Eigen::Vector3d xyz(0.0, 0.0, 5.0);
 
-  img1.features_undist[0] = (img1.cam_from_world * xyz).normalized();
+  rec.Image(1).features_undist[0] =
+      (rec.Image(1).cam_from_world * xyz).normalized();
   // For img2, give a perfectly aligned feature_undist regardless: the
   // ``z < EPS`` early continue kicks in before the angle check.
-  img2.features_undist[0] = Eigen::Vector3d::UnitZ();
-
-  images.emplace(1, std::move(img1));
-  images.emplace(2, std::move(img2));
+  rec.Image(2).features_undist[0] = Eigen::Vector3d::UnitZ();
 
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
   const int touched = FilterTracksByAngle(
-      view_graph, cameras, images, tracks, /*max_angle_error=*/1.0);
+      view_graph, rec, tracks, /*max_angle_error=*/1.0);
   EXPECT_EQ(touched, 1);
   // Only image 1's observation survived.
   ASSERT_EQ(tracks.at(1).track.Length(), 1u);
@@ -247,26 +229,38 @@ TEST(TrackFilter, FilterByAngle_PointBehindCameraSkipped) {
 
 // === FilterTrackTriangulationAngle tests ===
 
+// Build a rec with no camera (FilterTrackTriangulationAngle doesn't use cameras)
+// just images.
+Reconstruction MakeRecImagesOnly(
+    const std::vector<std::pair<image_t, Rigid3d>>& img_specs) {
+  Reconstruction rec;
+  Camera cam = MakePinholeCamera(1, /*has_prior=*/true);
+  rec.AddCameraWithTrivialRig(cam);
+  for (const auto& [image_id, pose] : img_specs) {
+    Image image;
+    image.SetImageId(image_id);
+    image.SetCameraId(1);
+    image.cam_from_world = pose;
+    rec.AddImageWithTrivialFrame(std::move(image), pose);
+  }
+  return rec;
+}
+
 // Both camera centers at the world origin => rays from same point are
 // parallel => triangulation angle = 0 => track dropped.
 TEST(TrackFilter, FilterTriAngle_ParallelRaysDropped) {
   CorrespondenceGraph view_graph;
-  std::unordered_map<image_t, Image> images;
   std::unordered_map<point3D_t, Point3D> tracks;
 
   // Two cameras both at origin, identity orientation => same projection center.
-  Image img1 = MakeImage(1, 1, Rigid3d(), 1);
-  Image img2 = MakeImage(2, 1, Rigid3d(), 1);
+  Reconstruction rec =
+      MakeRecImagesOnly({{1, Rigid3d()}, {2, Rigid3d()}});
 
   Eigen::Vector3d xyz(0.0, 0.0, 5.0);
-
-  images.emplace(1, std::move(img1));
-  images.emplace(2, std::move(img2));
-
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
   const int touched = FilterTrackTriangulationAngle(
-      view_graph, images, tracks, /*min_angle=*/1.0);
+      view_graph, rec, tracks, /*min_angle=*/1.0);
   EXPECT_EQ(touched, 1);
   EXPECT_EQ(tracks.at(1).track.Length(), 0u);
 }
@@ -275,30 +269,20 @@ TEST(TrackFilter, FilterTriAngle_ParallelRaysDropped) {
 // is large (45deg between the two view rays from the point) => track kept.
 TEST(TrackFilter, FilterTriAngle_PerpendicularRaysKept) {
   CorrespondenceGraph view_graph;
-  std::unordered_map<image_t, Image> images;
   std::unordered_map<point3D_t, Point3D> tracks;
 
-  // Cam1 center at (-5, 0, 0), Cam2 center at (5, 0, 0). Point at (0, 0, 5).
-  // Rays from point: (5, 0, -5)/|.| and (-5, 0, -5)/|.|. Dot product = 0
-  // i.e. 90deg triangulation angle => well above 1deg threshold.
-  // We only need the projection center, so cam_from_world is just t = -R*c.
   Rigid3d cam1_from_world(Eigen::Quaterniond::Identity(),
                           Eigen::Vector3d(5.0, 0.0, 0.0));
   Rigid3d cam2_from_world(Eigen::Quaterniond::Identity(),
                           Eigen::Vector3d(-5.0, 0.0, 0.0));
-
-  Image img1 = MakeImage(1, 1, cam1_from_world, 1);
-  Image img2 = MakeImage(2, 1, cam2_from_world, 1);
+  Reconstruction rec =
+      MakeRecImagesOnly({{1, cam1_from_world}, {2, cam2_from_world}});
 
   Eigen::Vector3d xyz(0.0, 0.0, 5.0);
-
-  images.emplace(1, std::move(img1));
-  images.emplace(2, std::move(img2));
-
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
   const int touched = FilterTrackTriangulationAngle(
-      view_graph, images, tracks, /*min_angle=*/1.0);
+      view_graph, rec, tracks, /*min_angle=*/1.0);
   EXPECT_EQ(touched, 0);
   EXPECT_EQ(tracks.at(1).track.Length(), 2u);
 }
@@ -307,11 +291,7 @@ TEST(TrackFilter, FilterTriAngle_PerpendicularRaysKept) {
 // below / just above it.
 TEST(TrackFilter, FilterTriAngle_ThreshSweep) {
   CorrespondenceGraph view_graph;
-  std::unordered_map<image_t, Image> images;
-  std::unordered_map<point3D_t, Point3D> tracks;
 
-  // Place camera centers at C1=(-d, 0, 0), C2=(d, 0, 0); point at P=(0, 0, h).
-  // Triangulation angle theta = 2 * atan2(d, h).
   const double d = 1.0;
   const double h = 10.0;
   const double theta_deg = RadToDeg(2.0 * std::atan2(d, h));
@@ -320,12 +300,8 @@ TEST(TrackFilter, FilterTriAngle_ThreshSweep) {
                           Eigen::Vector3d(d, 0.0, 0.0));
   Rigid3d cam2_from_world(Eigen::Quaterniond::Identity(),
                           Eigen::Vector3d(-d, 0.0, 0.0));
-
-  Image img1 = MakeImage(1, 1, cam1_from_world, 1);
-  Image img2 = MakeImage(2, 1, cam2_from_world, 1);
-
-  images.emplace(1, std::move(img1));
-  images.emplace(2, std::move(img2));
+  Reconstruction rec =
+      MakeRecImagesOnly({{1, cam1_from_world}, {2, cam2_from_world}});
 
   Eigen::Vector3d xyz(0.0, 0.0, h);
 
@@ -334,7 +310,7 @@ TEST(TrackFilter, FilterTriAngle_ThreshSweep) {
     std::unordered_map<point3D_t, Point3D> tracks_kept;
     tracks_kept.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
     const int touched = FilterTrackTriangulationAngle(
-        view_graph, images, tracks_kept, theta_deg - 0.1);
+        view_graph, rec, tracks_kept, theta_deg - 0.1);
     EXPECT_EQ(touched, 0);
     EXPECT_EQ(tracks_kept.at(1).track.Length(), 2u);
   }
@@ -344,7 +320,7 @@ TEST(TrackFilter, FilterTriAngle_ThreshSweep) {
     std::unordered_map<point3D_t, Point3D> tracks_dropped;
     tracks_dropped.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
     const int touched = FilterTrackTriangulationAngle(
-        view_graph, images, tracks_dropped, theta_deg + 0.1);
+        view_graph, rec, tracks_dropped, theta_deg + 0.1);
     EXPECT_EQ(touched, 1);
     EXPECT_EQ(tracks_dropped.at(1).track.Length(), 0u);
   }

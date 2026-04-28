@@ -31,6 +31,7 @@
 
 #include "colmap/geometry/essential_matrix.h"
 #include "colmap/geometry/homography_matrix.h"
+#include "colmap/scene/reconstruction.h"
 
 namespace colmap {
 namespace {
@@ -89,15 +90,10 @@ double SampsonError(const Eigen::Matrix3d& E,
 
 class ImagePairInliers {
  public:
-  ImagePairInliers(
-      CorrespondenceGraph::ImagePair& image_pair,
-      const std::unordered_map<image_t, Image>& images,
-      const InlierThresholdOptions& options,
-      const std::unordered_map<camera_t, Camera>* cameras = nullptr)
-      : image_pair(image_pair),
-        images(images),
-        cameras(cameras),
-        options(options) {}
+  ImagePairInliers(CorrespondenceGraph::ImagePair& image_pair,
+                   const Reconstruction& rec,
+                   const InlierThresholdOptions& options)
+      : image_pair(image_pair), rec(rec), options(options) {}
 
   // Score the pair via Sampson + cheirality + degeneracy gates. Stores
   // surviving match indices in ``image_pair.inliers``.
@@ -109,8 +105,7 @@ class ImagePairInliers {
   void ScoreErrorHomography();
 
   CorrespondenceGraph::ImagePair& image_pair;
-  const std::unordered_map<image_t, Image>& images;
-  const std::unordered_map<camera_t, Camera>* cameras;
+  const Reconstruction& rec;
   const InlierThresholdOptions& options;
 };
 
@@ -154,8 +149,8 @@ void ImagePairInliers::ScoreErrorEssential() {
   // Convert the threshold from pixel space to normalized space.
   const double thres =
       options.max_epipolar_error_E * 0.5 *
-      (1. / cameras->at(images.at(image_id1).CameraId()).MeanFocalLength() +
-       1. / cameras->at(images.at(image_id2).CameraId()).MeanFocalLength());
+      (1. / rec.Camera(rec.Image(image_id1).CameraId()).MeanFocalLength() +
+       1. / rec.Camera(rec.Image(image_id2).CameraId()).MeanFocalLength());
   const double sq_threshold = thres * thres;
 
   double thres_epipole = std::cos(DegToRad(options.min_angle_from_epipole));
@@ -167,9 +162,9 @@ void ImagePairInliers::ScoreErrorEssential() {
   for (size_t k = 0; k < total_matches; ++k) {
     // Use the undistorted features.
     const Eigen::Vector3d pt1 =
-        images.at(image_id1).features_undist[image_pair.matches(k, 0)];
+        rec.Image(image_id1).features_undist[image_pair.matches(k, 0)];
     const Eigen::Vector3d pt2 =
-        images.at(image_id2).features_undist[image_pair.matches(k, 1)];
+        rec.Image(image_id2).features_undist[image_pair.matches(k, 1)];
     const double r2 = SampsonError(E, pt1, pt2);
 
     if (r2 >= sq_threshold) continue;
@@ -227,9 +222,9 @@ void ImagePairInliers::ScoreErrorFundamental() {
   std::vector<int> inliers_pre;
   for (size_t k = 0; k < total_matches; ++k) {
     const Eigen::Vector2d pt1 =
-        images.at(image_id1).features[image_pair.matches(k, 0)];
+        rec.Image(image_id1).features[image_pair.matches(k, 0)];
     const Eigen::Vector2d pt2 =
-        images.at(image_id2).features[image_pair.matches(k, 1)];
+        rec.Image(image_id2).features[image_pair.matches(k, 1)];
     const double r2 =
         ComputeSquaredSampsonError(pt1.homogeneous(),
                                    pt2.homogeneous(),
@@ -271,9 +266,9 @@ void ImagePairInliers::ScoreErrorHomography() {
   const size_t total_matches = image_pair.matches.rows();
   for (size_t k = 0; k < total_matches; ++k) {
     const Eigen::Vector2d pt1 =
-        images.at(image_id1).features[image_pair.matches(k, 0)];
+        rec.Image(image_id1).features[image_pair.matches(k, 0)];
     const Eigen::Vector2d pt2 =
-        images.at(image_id2).features[image_pair.matches(k, 1)];
+        rec.Image(image_id2).features[image_pair.matches(k, 1)];
     const double r2 = ComputeSquaredHomographyError(
         pt1, pt2, *image_pair.two_view_geometry.H);
 
@@ -286,19 +281,17 @@ void ImagePairInliers::ScoreErrorHomography() {
 
 }  // namespace
 
-void ImagePairsInlierCount(
-    CorrespondenceGraph& correspondence_graph,
-    const std::unordered_map<camera_t, Camera>& cameras,
-    const std::unordered_map<image_t, Image>& images,
-    const InlierThresholdOptions& options,
-    bool clean_inliers) {
+void ImagePairsInlierCount(CorrespondenceGraph& correspondence_graph,
+                           const Reconstruction& rec,
+                           const InlierThresholdOptions& options,
+                           bool clean_inliers) {
   for (auto& [pair_id, image_pair] :
        correspondence_graph.MutableImagePairs()) {
     if (!clean_inliers && image_pair.inliers.size() > 0) continue;
     image_pair.inliers.clear();
 
     if (image_pair.is_valid == false) continue;
-    ImagePairInliers inlier_finder(image_pair, images, options, &cameras);
+    ImagePairInliers inlier_finder(image_pair, rec, options);
     inlier_finder.ScoreError();
   }
 }

@@ -36,8 +36,6 @@
 #include "colmap/sensor/bitmap.h"
 #include "colmap/util/types.h"
 
-#include <unordered_map>
-
 namespace colmap {
 
 struct UndistortCameraOptions {
@@ -122,15 +120,12 @@ void RectifyAndUndistortStereoImages(const UndistortCameraOptions& options,
 
 // Populate ``Image::features_undist`` with normalized 3D bearing rays for
 // every distorted pixel in ``Image::features``. For each image, looks up the
-// associated camera in ``cameras`` and applies ``Camera::CamFromImg`` plus
+// associated camera via ``rec`` and applies ``Camera::CamFromImg`` plus
 // ``.homogeneous().normalized()`` to every feature; per-image work is run
-// in parallel via ``ThreadPool``. Mutates ``images`` in place.
+// in parallel via ``ThreadPool``. Mutates images in ``rec`` in place.
 //
 // If ``clean_points`` is true (default), always recomputes; if false, skips
 // images whose ``features_undist`` already has the same length as ``features``.
-void UndistortImageFeatures(
-    const std::unordered_map<camera_t, Camera>& cameras,
-    std::unordered_map<image_t, Image>& images,
-    bool clean_points = true);
+void UndistortImageFeatures(Reconstruction& rec, bool clean_points = true);
 
 }  // namespace colmap

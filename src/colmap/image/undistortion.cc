@@ -394,13 +394,10 @@ void RectifyAndUndistortStereoImages(const UndistortCameraOptions& options,
                                         undistorted_image2);
 }
 
-void UndistortImageFeatures(
-    const std::unordered_map<camera_t, Camera>& cameras,
-    std::unordered_map<image_t, Image>& images,
-    bool clean_points) {
+void UndistortImageFeatures(Reconstruction& rec, bool clean_points) {
   std::vector<image_t> image_ids;
-  image_ids.reserve(images.size());
-  for (const auto& [image_id, image] : images) {
+  image_ids.reserve(rec.NumImages());
+  for (const auto& [image_id, image] : rec.Images()) {
     if (image.features_undist.size() == image.features.size() && !clean_points)
       continue;
     image_ids.push_back(image_id);
@@ -411,8 +408,8 @@ void UndistortImageFeatures(
   ThreadPool thread_pool(ThreadPool::kMaxNumThreads);
   LOG(INFO) << "Undistorting " << image_ids.size() << " images...";
   for (const image_t image_id : image_ids) {
-    Image& image = images.at(image_id);
-    const Camera& camera = cameras.at(image.CameraId());
+    Image& image = rec.Image(image_id);
+    const Camera& camera = rec.Camera(image.CameraId());
     thread_pool.AddTask([&image, &camera]() {
       const size_t n = image.features.size();
       image.features_undist.clear();
