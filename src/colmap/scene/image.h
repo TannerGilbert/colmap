@@ -160,8 +160,6 @@ class Image {
   std::vector<bool> is_track_anchor;
   // Per-feature angular standard deviations (sigma_x, sigma_y) in radians.
   std::vector<Eigen::Vector2d> angular_stddevs;
-  // Per-feature Cholesky factor (L00, L10, L11) of angular precision matrix.
-  std::vector<Eigen::Vector3d> angular_cholesky_xy;
 
   // FORK-REMOVAL TODO: features / features_undist are fork-only.
   // See .claude/notes/glomap_audit/fork_removal_todo.md.

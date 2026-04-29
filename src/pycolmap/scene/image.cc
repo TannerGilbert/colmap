@@ -23,6 +23,29 @@ using namespace colmap;
 using namespace pybind11::literals;
 namespace py = pybind11;
 
+namespace {
+
+template <typename PyClass>
+void DefBoolVectorProperty(PyClass& cls,
+                           const char* name,
+                           std::vector<bool> Image::*member) {
+  cls.def_property(
+      name,
+      [member](const Image& self) -> Eigen::Array<bool, Eigen::Dynamic, 1> {
+        const auto& vec = self.*member;
+        Eigen::Array<bool, Eigen::Dynamic, 1> arr(vec.size());
+        for (size_t i = 0; i < vec.size(); ++i) arr[i] = vec[i];
+        return arr;
+      },
+      [member](Image& self, const Eigen::Array<bool, Eigen::Dynamic, 1>& v) {
+        auto& vec = self.*member;
+        vec.assign(v.size(), false);
+        for (Eigen::Index i = 0; i < v.size(); ++i) vec[i] = v[i];
+      });
+}
+
+}  // namespace
+
 template <typename T>
 std::shared_ptr<Image> MakeImage(const std::string& name,
                                  const std::vector<T>& points2D,
@@ -128,40 +151,7 @@ void BindSceneImage(py::module& m) {
       .def("has_pixel_covariances",
            &Image::HasPixelCovariances,
            "Check if pixel covariances are set and match points2D count.")
-      // Per-feature/per-image fields. Bound as def_property with Eigen-typed
-      // getters/setters so Python sees numpy.ndarray rather than list — the
-      // pipeline code does numpy fancy-indexing on these.
-      .def_property(
-          "is_inlier",
-          [](const Image& self) -> Eigen::Array<bool, Eigen::Dynamic, 1> {
-            Eigen::Array<bool, Eigen::Dynamic, 1> arr(self.is_inlier.size());
-            for (size_t i = 0; i < self.is_inlier.size(); ++i)
-              arr[i] = self.is_inlier[i];
-            return arr;
-          },
-          [](Image& self,
-             const Eigen::Array<bool, Eigen::Dynamic, 1>& v) {
-            self.is_inlier.assign(v.size(), false);
-            for (Eigen::Index i = 0; i < v.size(); ++i)
-              self.is_inlier[i] = v[i];
-          })
-      .def_property(
-          "is_track_anchor",
-          [](const Image& self) -> Eigen::Array<bool, Eigen::Dynamic, 1> {
-            Eigen::Array<bool, Eigen::Dynamic, 1> arr(
-                self.is_track_anchor.size());
-            for (size_t i = 0; i < self.is_track_anchor.size(); ++i)
-              arr[i] = self.is_track_anchor[i];
-            return arr;
-          },
-          [](Image& self,
-             const Eigen::Array<bool, Eigen::Dynamic, 1>& v) {
-            self.is_track_anchor.assign(v.size(), false);
-            for (Eigen::Index i = 0; i < v.size(); ++i)
-              self.is_track_anchor[i] = v[i];
-          })
       .def_readwrite("angular_stddevs", &Image::angular_stddevs)
-      .def_readwrite("angular_cholesky_xy", &Image::angular_cholesky_xy)
       // FORK-REMOVAL TODO — `features` / `features_undist` are fork-only
       // fields. See `.claude/notes/glomap_audit/fork_removal_todo.md`.
       .def_readwrite("features", &Image::features)
@@ -246,6 +236,8 @@ void BindSceneImage(py::module& m) {
             return points2D;
           },
           "Get the 2D points that observe a 3D point.");
+  DefBoolVectorProperty(PyImage, "is_inlier", &Image::is_inlier);
+  DefBoolVectorProperty(PyImage, "is_track_anchor", &Image::is_track_anchor);
   MakeDataclass(PyImage);
 
   py::bind_map<ImageMap>(m, "ImageMap");

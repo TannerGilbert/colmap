@@ -44,7 +44,6 @@ Image::Image(const Image& other)
     : features(other.features),
       features_undist(other.features_undist),
       angular_stddevs(other.angular_stddevs),
-      angular_cholesky_xy(other.angular_cholesky_xy),
       is_inlier(other.is_inlier),
       is_track_anchor(other.is_track_anchor),
       name_(other.Name()),
@@ -80,7 +79,6 @@ Image& Image::operator=(const Image& other) {
     features = other.features;
     features_undist = other.features_undist;
     angular_stddevs = other.angular_stddevs;
-    angular_cholesky_xy = other.angular_cholesky_xy;
     is_inlier = other.is_inlier;
     is_track_anchor = other.is_track_anchor;
   }
