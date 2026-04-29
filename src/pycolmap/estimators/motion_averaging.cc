@@ -16,9 +16,7 @@ namespace py = pybind11;
 
 void BindGlobalPositioner(py::module& m) {
   // ``LossConfig`` is bound by ``BindBundleAdjuster`` (estimators/
-  // bundle_adjustment.cc), which runs earlier in ``BindEstimators``;
-  // ``GlobalPositionerOptions::main_loss`` and the per-bucket configs
-  // below reference that already-registered class.
+  // bundle_adjustment.cc), which runs earlier in ``BindEstimators``.
   auto PyGlobalPositionerOptions =
       py::classh<GlobalPositionerOptions>(m, "GlobalPositionerOptions")
           .def(py::init<>())

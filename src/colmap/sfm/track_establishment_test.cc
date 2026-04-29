@@ -1,35 +1,8 @@
-// Copyright (c), ETH Zurich and UNC Chapel Hill.
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//
-//     * Redistributions in binary form must reproduce the above copyright
-//       notice, this list of conditions and the following disclaimer in the
-//       documentation and/or other materials provided with the distribution.
-//
-//     * Neither the name of ETH Zurich and UNC Chapel Hill nor the names of
-//       its contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-
 #include "colmap/sfm/track_establishment.h"
 
+#include "colmap/feature/types.h"
 #include "colmap/scene/correspondence_graph.h"
+#include "colmap/scene/two_view_geometry.h"
 #include "colmap/scene/image.h"
 #include "colmap/scene/point3d.h"
 #include "colmap/util/types.h"
@@ -46,26 +19,21 @@
 namespace colmap {
 namespace {
 
-// Build an ImagePair entry directly into the corr_graph's image_pairs map
-// with the ``matches`` and ``inliers`` fields populated.
-// ``EstablishTracksFromCorrGraph`` only reads those two fields plus the pair
-// keys, so we bypass ``AddTwoViewGeometry`` and the colmap flat_corrs path.
+// Populate a correspondence graph via the proper AddTwoViewGeometry path so
+// that ExtractMatchesBetweenImages can find the correspondences.
 void AddImagePair(CorrespondenceGraph& corr_graph,
                   image_t image_id1,
                   image_t image_id2,
                   const std::vector<std::pair<int, int>>& matches,
                   const std::vector<int>& inliers) {
-  const image_pair_t pair_id = ImagePairToPairId(image_id1, image_id2);
-  CorrespondenceGraph::ImagePair image_pair(image_id1, image_id2);
-  Eigen::MatrixXi matches_mat(static_cast<int>(matches.size()), 2);
-  for (size_t i = 0; i < matches.size(); ++i) {
-    matches_mat(static_cast<int>(i), 0) = matches[i].first;
-    matches_mat(static_cast<int>(i), 1) = matches[i].second;
+  struct TwoViewGeometry tvg;
+  tvg.inlier_matches.reserve(inliers.size());
+  for (const int idx : inliers) {
+    tvg.inlier_matches.emplace_back(
+        static_cast<point2D_t>(matches[idx].first),
+        static_cast<point2D_t>(matches[idx].second));
   }
-  image_pair.matches = std::move(matches_mat);
-  image_pair.inliers = inliers;
-  image_pair.num_matches = static_cast<point2D_t>(inliers.size());
-  corr_graph.MutableImagePairs().emplace(pair_id, std::move(image_pair));
+  corr_graph.AddTwoViewGeometry(image_id1, image_id2, std::move(tvg));
 }
 
 // Build a map ``image_id -> [Vector2d(0,0), Vector2d(1,1), ...]`` so all
@@ -192,61 +160,6 @@ TEST(TrackEstablishment, IntraImageConsistencyDropsInconsistentTrack) {
 
   // The single track we constructed is inconsistent; nothing else exists.
   EXPECT_TRUE(tracks.empty());
-}
-
-// ``ignore_match`` returning true for any match touching image 1 strips
-// image 1's contribution from union-find. The remaining 5 tracks then have
-// length 2 (only images 2 and 3) so default min_views=3 drops them all;
-// loosening to min_views=2 surfaces them and asserts none of the kept tracks
-// reference image 1.
-TEST(TrackEstablishment, IgnoreMatchPredicateDropsImage) {
-  CorrespondenceGraph corr_graph;
-  corr_graph.AddImage(1, 5);
-  corr_graph.AddImage(2, 5);
-  corr_graph.AddImage(3, 5);
-
-  std::vector<std::pair<int, int>> matches;
-  std::vector<int> inliers;
-  for (int i = 0; i < 5; ++i) {
-    matches.emplace_back(i, i);
-    inliers.push_back(i);
-  }
-  AddImagePair(corr_graph, 1, 2, matches, inliers);
-  AddImagePair(corr_graph, 1, 3, matches, inliers);
-  AddImagePair(corr_graph, 2, 3, matches, inliers);
-
-  const auto keypoints = MakeWellSeparatedKeypoints({1, 2, 3}, 5);
-  const auto pair_ids = CollectPairIds(corr_graph);
-
-  const MatchPredicate ignore_image1 =
-      [](image_t i1, point2D_t /*p1*/, image_t i2, point2D_t /*p2*/) {
-        return i1 == 1 || i2 == 1;
-      };
-
-  // With min_views=3, dropping image 1 leaves only length-2 tracks across
-  // images 2-3, all filtered out.
-  {
-    TrackEstablishmentOptions options;  // default min_views=3
-    const auto tracks = EstablishTracksFromCorrGraph(
-        pair_ids, corr_graph, keypoints, options, ignore_image1);
-    EXPECT_TRUE(tracks.empty());
-  }
-
-  // With min_views=2 the surviving tracks become visible; verify image 1 is
-  // entirely absent.
-  {
-    TrackEstablishmentOptions options;
-    options.min_num_views_per_track = 2;
-    const auto tracks = EstablishTracksFromCorrGraph(
-        pair_ids, corr_graph, keypoints, options, ignore_image1);
-    EXPECT_EQ(tracks.size(), 5);
-    for (const auto& [pid, point3D] : tracks) {
-      EXPECT_EQ(point3D.track.Length(), 2);
-      for (const auto& el : point3D.track.Elements()) {
-        EXPECT_NE(el.image_id, 1u);
-      }
-    }
-  }
 }
 
 // Empty ``valid_pair_ids`` yields no tracks and no crash.
@@ -431,14 +344,9 @@ TEST(FindTracksForProblem, MinTracksPerViewBugDocumentation) {
 // ProcessLoopClosurePairs (second pass over LC-marked inlier matches)
 // ============================================================================
 //
-// These tests now drive the two-step ``EstablishTracksFromCorrGraph`` (with
-// ``MakeLoopClosureMatchPredicate`` filtering LC matches out of the union-
-// find pass) followed by ``AppendLoopClosureObservations`` (which adds LC
-// observations as parallel ``Track::lc_elements``). Setup:
-//   * Regular matches (``are_lc[idx]=false``) drive native track construction.
-//   * LC matches (``are_lc[idx]=true``) are skipped by
-//     ``MakeLoopClosureMatchPredicate`` and consumed by
-//     ``AppendLoopClosureObservations``.
+// Two-step: ``EstablishTracksFromCorrGraph`` builds native tracks from all
+// correspondences in the CG; ``AppendLoopClosureObservations`` then reads
+// ``ImagePair.are_lc`` to attach LC observations as ``Track::lc_elements``.
 // The post-condition tracks dict is what we assert on.
 
 // Variant of ``AddImagePair`` that also populates ``are_lc``. Each
@@ -494,10 +402,8 @@ std::unordered_map<point3D_t, Point3D> EstablishFullTracks(
     const std::unordered_map<image_t, std::vector<Eigen::Vector2d>>& keypoints,
     const TrackEstablishmentOptions& options) {
   const auto pair_ids = CollectPairIds(corr_graph);
-  const auto ignore_lc =
-      MakeLoopClosureMatchPredicate(pair_ids, corr_graph);
-  auto tracks = EstablishTracksFromCorrGraph(
-      pair_ids, corr_graph, keypoints, options, ignore_lc);
+  auto tracks =
+      EstablishTracksFromCorrGraph(pair_ids, corr_graph, keypoints, options);
   AppendLoopClosureObservations(pair_ids, corr_graph, tracks);
   return tracks;
 }
