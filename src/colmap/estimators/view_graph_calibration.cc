@@ -457,4 +457,65 @@ bool CalibrateViewGraph(const ViewGraphCalibrationOptions& options,
   return true;
 }
 
+bool CalibrateViewGraph(const ViewGraphCalibrationOptions& options,
+                        CorrespondenceGraph& view_graph,
+                        Reconstruction& rec) {
+  std::vector<FocalLengthCalibInput> inputs;
+  inputs.reserve(view_graph.NumImagePairs());
+  std::unordered_map<image_pair_t, CorrespondenceGraph::ImagePair*> pair_lookup;
+  pair_lookup.reserve(view_graph.NumImagePairs());
+  for (auto& [pair_id, image_pair] : view_graph.MutableImagePairs()) {
+    const auto& tvg = image_pair.two_view_geometry;
+    if (tvg.config != TwoViewGeometry::CALIBRATED &&
+        tvg.config != TwoViewGeometry::UNCALIBRATED)
+      continue;
+    if (!image_pair.is_valid) continue;
+    THROW_CHECK(tvg.F.has_value())
+        << "Two-view geometry must have F matrix for VGC";
+    inputs.push_back({pair_id,
+                      rec.Image(image_pair.image_id1).CameraId(),
+                      rec.Image(image_pair.image_id2).CameraId(),
+                      tvg.F.value()});
+    pair_lookup[pair_id] = &image_pair;
+  }
+
+  std::unordered_map<camera_t, Camera> cameras;
+  cameras.reserve(rec.NumCameras());
+  for (auto& [cid, cam] : rec.Cameras()) {
+    cameras.emplace(cid, cam);
+  }
+
+  const FocalLengthCalibResult result =
+      CalibrateFocalLengths(options, inputs, cameras);
+  if (!result.success) {
+    return false;
+  }
+
+  for (auto& [camera_id, camera] : cameras) {
+    auto it = result.focal_lengths.find(camera_id);
+    if (it == result.focal_lengths.end()) continue;
+    if (camera.has_prior_focal_length) continue;
+    for (const size_t idx : camera.FocalLengthIdxs()) {
+      camera.params[idx] = it->second;
+    }
+    rec.Camera(camera_id) = camera;
+  }
+
+  const double max_err_sq =
+      options.max_calibration_error * options.max_calibration_error;
+  size_t invalid_counter = 0;
+  for (const auto& input : inputs) {
+    auto it = result.calibration_errors_sq.find(input.pair_id);
+    if (it == result.calibration_errors_sq.end()) continue;
+    if (it->second > max_err_sq) {
+      pair_lookup.at(input.pair_id)->is_valid = false;
+      invalid_counter++;
+    }
+  }
+  LOG(INFO) << "VGC: invalidated " << invalid_counter << " / " << inputs.size()
+            << " pairs (residual^2 > " << max_err_sq << ")";
+
+  return true;
+}
+
 }  // namespace colmap
