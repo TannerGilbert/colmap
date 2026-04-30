@@ -30,9 +30,7 @@
 #pragma once
 
 #include "colmap/scene/camera.h"
-#include "colmap/scene/correspondence_graph.h"
 #include "colmap/scene/database.h"
-#include "colmap/scene/reconstruction.h"
 #include "colmap/util/types.h"
 
 #include <memory>
@@ -97,15 +95,6 @@ struct ViewGraphCalibrationOptions {
 // CALIBRATED. Pairs with high calibration error are tagged as DEGENERATE.
 bool CalibrateViewGraph(const ViewGraphCalibrationOptions& options,
                         Database* database);
-
-// Calibrate focal lengths using fundamental matrices from the correspondence
-// graph, then write updated focals back into the reconstruction's cameras.
-// Pairs whose calibration error exceeds the threshold are invalidated.
-// Unlike the Database overload, this skips cross-validation, F/E
-// recomputation, and relative-pose re-estimation.
-bool CalibrateViewGraph(const ViewGraphCalibrationOptions& options,
-                        CorrespondenceGraph& view_graph,
-                        Reconstruction& rec);
 
 // Pure-function input for the inner Ceres focal-length calibration. Holds the
 // fundamental matrix per pair plus the two camera ids it constrains.
