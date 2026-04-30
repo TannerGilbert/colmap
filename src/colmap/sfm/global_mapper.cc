@@ -174,22 +174,15 @@ void GlobalMapper::SubsampleTracksForProblem(
   opts.max_num_views_per_track = options.track_max_num_views_per_track;
   opts.required_tracks_per_view = options.track_required_tracks_per_view;
   opts.max_num_tracks = options.track_max_num_tracks;
-  opts.two_view_depth_gate = options.track_two_view_depth_gate;
 
   // Extract registered image set from the reconstruction.
-  // Depth-prior maps are empty here (populated by optional depth extension);
-  // pass empty containers to SubsampleTracks.
   std::unordered_set<image_t> registered_image_ids;
-  std::unordered_map<image_t, std::vector<double>> depth_priors;
-  std::unordered_map<image_t, std::vector<bool>> depth_prior_validity;
   for (const image_t image_id : reconstruction_->RegImageIds()) {
     registered_image_ids.insert(image_id);
   }
 
   auto selected = SubsampleTracks(opts,
                                    registered_image_ids,
-                                   depth_priors,
-                                   depth_prior_validity,
                                    reconstruction_->Points3D());
 
   // Sync back: drop everything not in the selected dict, replace tracks

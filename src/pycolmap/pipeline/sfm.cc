@@ -196,8 +196,6 @@ void BindSfM(py::module& m) {
                            &Opts::track_max_num_tracks)
             .def_readwrite("track_lc_second_pass",
                            &Opts::track_lc_second_pass)
-            .def_readwrite("track_two_view_depth_gate",
-                           &Opts::track_two_view_depth_gate)
             .def_readwrite("max_angular_reproj_error_deg",
                            &Opts::max_angular_reproj_error_deg)
             .def_readwrite("max_normalized_reproj_error",

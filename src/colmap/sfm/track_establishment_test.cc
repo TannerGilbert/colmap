@@ -224,8 +224,6 @@ TEST(FindTracksForProblem, LengthFilter) {
   }
 
   const auto reg_ids = MakeRegisteredImageIds(images);
-  const std::unordered_map<image_t, std::vector<double>> empty_depths;
-  const std::unordered_map<image_t, std::vector<bool>> empty_validity;
 
   // High-min variant: tracks have length 3, demand 10.
   {
@@ -233,7 +231,7 @@ TEST(FindTracksForProblem, LengthFilter) {
     options.min_num_views_per_track = 10;
     options.required_tracks_per_view = 1000;  // never saturate
     const auto selected = SubsampleTracks(
-        options, reg_ids, empty_depths, empty_validity, tracks_full);
+        options, reg_ids, tracks_full);
     EXPECT_EQ(selected.size(), 0u);
     EXPECT_TRUE(selected.empty());
   }
@@ -244,7 +242,7 @@ TEST(FindTracksForProblem, LengthFilter) {
     options.min_num_views_per_track = 2;
     options.required_tracks_per_view = 1000;
     const auto selected = SubsampleTracks(
-        options, reg_ids, empty_depths, empty_validity, tracks_full);
+        options, reg_ids, tracks_full);
     EXPECT_EQ(selected.size(), 5u);
   }
 }
@@ -266,15 +264,13 @@ TEST(FindTracksForProblem, MaxLengthFilter) {
   }
 
   const auto reg_ids = MakeRegisteredImageIds(images);
-  const std::unordered_map<image_t, std::vector<double>> empty_depths;
-  const std::unordered_map<image_t, std::vector<bool>> empty_validity;
 
   TrackSubsampleOptions options;
   options.min_num_views_per_track = 2;
   options.max_num_views_per_track = 4;
   options.required_tracks_per_view = 1000;
   const auto selected = SubsampleTracks(
-      options, reg_ids, empty_depths, empty_validity, tracks_full);
+      options, reg_ids, tracks_full);
   EXPECT_EQ(selected.size(), 0u);
   EXPECT_TRUE(selected.empty());
 }
@@ -297,14 +293,12 @@ TEST(FindTracksForProblem, GreedyQuota) {
   }
 
   const auto reg_ids = MakeRegisteredImageIds(images);
-  const std::unordered_map<image_t, std::vector<double>> empty_depths;
-  const std::unordered_map<image_t, std::vector<bool>> empty_validity;
 
   TrackSubsampleOptions options;
   options.min_num_views_per_track = 2;
   options.required_tracks_per_view = 2;
   const auto selected = SubsampleTracks(
-      options, reg_ids, empty_depths, empty_validity, tracks_full);
+      options, reg_ids, tracks_full);
   const size_t n_selected = selected.size();
 
   // Each track touches all 3 images so 2 tracks fully satisfy the per-view
@@ -328,14 +322,12 @@ TEST(FindTracksForProblem, MinTracksPerViewBugDocumentation) {
   }
 
   const auto reg_ids = MakeRegisteredImageIds(images);
-  const std::unordered_map<image_t, std::vector<double>> empty_depths;
-  const std::unordered_map<image_t, std::vector<bool>> empty_validity;
 
   TrackSubsampleOptions options;
   options.min_num_views_per_track = 2;
   // options.required_tracks_per_view stays at default = INT_MAX.
   const auto selected = SubsampleTracks(
-      options, reg_ids, empty_depths, empty_validity, tracks_full);
+      options, reg_ids, tracks_full);
   // All 3 tracks are kept — the quota gate is disabled by INT_MAX bar.
   EXPECT_EQ(selected.size(), 3u);
 }

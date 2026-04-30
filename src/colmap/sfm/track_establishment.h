@@ -4,6 +4,7 @@
 #include "colmap/scene/point3d.h"
 #include "colmap/util/types.h"
 
+#include <functional>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -28,6 +29,17 @@ struct TrackEstablishmentOptions {
   int required_tracks_per_view = std::numeric_limits<int>::max();
 };
 
+// Predicate called for each match (image_id1, point2D_idx1, image_id2,
+// point2D_idx2). Returns true to skip (ignore) the match.
+using MatchPredicate = std::function<bool(image_t, point2D_t, image_t, point2D_t)>;
+
+// Returns a MatchPredicate that ignores matches flagged as LC (are_lc==true)
+// in the correspondence graph, so they are excluded from the first-pass
+// union-find and only incorporated via AppendLoopClosureObservations.
+MatchPredicate MakeLoopClosureMatchPredicate(
+    const std::vector<image_pair_t>& valid_pair_ids,
+    const CorrespondenceGraph& corr_graph);
+
 // Build tracks via union-find over matches extracted from the correspondence
 // graph with consistency check, length filter, and optional greedy subsample.
 // Returns {point3D_id: Point3D} with Track populated; xyz/color left for
@@ -37,7 +49,8 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
     const CorrespondenceGraph& corr_graph,
     const std::unordered_map<image_t, std::vector<Eigen::Vector2d>>&
         image_id_to_keypoints,
-    const TrackEstablishmentOptions& options);
+    const TrackEstablishmentOptions& options,
+    const MatchPredicate& ignore_match = {});
 
 // Append LC observations to existing tracks as Track::lc_elements.
 // 4 cases: neither/both-distinct/both-same/one-side has a track.
@@ -52,17 +65,12 @@ struct TrackSubsampleOptions {
   int max_num_views_per_track = std::numeric_limits<int>::max();
   int required_tracks_per_view = std::numeric_limits<int>::max();
   int max_num_tracks = std::numeric_limits<int>::max();
-  // Drop 2-view tracks without valid depth priors on both observations.
-  bool two_view_depth_gate = false;
 };
 
-// Greedy length-sorted subsample with per-image quota and optional
-// 2-view depth gate. Returns selected tracks.
+// Greedy length-sorted subsample with per-image quota. Returns selected tracks.
 std::unordered_map<point3D_t, Point3D> SubsampleTracks(
     const TrackSubsampleOptions& options,
     const std::unordered_set<image_t>& registered_image_ids,
-    const std::unordered_map<image_t, std::vector<double>>& depth_priors,
-    const std::unordered_map<image_t, std::vector<bool>>& depth_prior_validity,
     const std::unordered_map<point3D_t, Point3D>& tracks_full);
 
 }  // namespace colmap

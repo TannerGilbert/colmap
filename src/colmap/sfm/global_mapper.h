@@ -75,8 +75,6 @@ struct GlobalMapperOptions {
   // Append LC observations to tracks after establishment. Bypasses
   // helper-side subsample; call SubsampleTracksForProblem after.
   bool track_lc_second_pass = false;
-  // Drop 2-view tracks without valid depth priors on both observations.
-  bool track_two_view_depth_gate = false;
 
   // Thresholds for each component.
   double max_angular_reproj_error_deg = 1.;   // for global positioning

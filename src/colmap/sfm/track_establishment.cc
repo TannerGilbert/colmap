@@ -5,6 +5,7 @@
 #include "colmap/util/logging.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace colmap {
@@ -20,12 +21,47 @@ inline uint64_t EncodeObservationKey(image_t image_id, point2D_t feature_id) {
 
 }  // namespace
 
+MatchPredicate MakeLoopClosureMatchPredicate(
+    const std::vector<image_pair_t>& valid_pair_ids,
+    const CorrespondenceGraph& corr_graph) {
+  // Build a set of (image_id, point2D_idx) keys that appear as inliers on
+  // LC-flagged matches. Any match touching one of these observations is
+  // suppressed in the first union-find pass so that LC observations only
+  // enter tracks via AppendLoopClosureObservations.
+  auto lc_obs = std::make_shared<std::unordered_set<uint64_t>>();
+  for (const image_pair_t pair_id : valid_pair_ids) {
+    const auto it = corr_graph.ImagePairsMap().find(pair_id);
+    if (it == corr_graph.ImagePairsMap().end()) continue;
+    const auto& image_pair = it->second;
+    const Eigen::MatrixXi& matches = image_pair.matches;
+    const std::vector<int>& inliers = image_pair.inliers;
+    const std::vector<bool>& are_lc = image_pair.are_lc;
+    for (const int idx : inliers) {
+      if (static_cast<size_t>(idx) < are_lc.size() && are_lc[idx]) {
+        lc_obs->insert(EncodeObservationKey(
+            image_pair.image_id1,
+            static_cast<point2D_t>(matches(idx, 0))));
+        lc_obs->insert(EncodeObservationKey(
+            image_pair.image_id2,
+            static_cast<point2D_t>(matches(idx, 1))));
+      }
+    }
+  }
+  return [lc_obs = std::move(lc_obs)](
+             image_t image_id1, point2D_t p1,
+             image_t image_id2, point2D_t p2) -> bool {
+    return lc_obs->count(EncodeObservationKey(image_id1, p1)) ||
+           lc_obs->count(EncodeObservationKey(image_id2, p2));
+  };
+}
+
 std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
     const std::vector<image_pair_t>& valid_pair_ids,
     const CorrespondenceGraph& corr_graph,
     const std::unordered_map<image_t, std::vector<Eigen::Vector2d>>&
         image_id_to_keypoints,
-    const TrackEstablishmentOptions& options) {
+    const TrackEstablishmentOptions& options,
+    const MatchPredicate& ignore_match) {
   using Observation = std::pair<image_t, point2D_t>;
 
   // Union all matching observations.
@@ -39,6 +75,10 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
         << "Missing keypoints for image " << image_id2;
     corr_graph.ExtractMatchesBetweenImages(image_id1, image_id2, matches);
     for (const auto& match : matches) {
+      if (ignore_match && ignore_match(image_id1, match.point2D_idx1,
+                                      image_id2, match.point2D_idx2)) {
+        continue;
+      }
       const Observation obs1(image_id1, match.point2D_idx1);
       const Observation obs2(image_id2, match.point2D_idx2);
       if (obs2 < obs1) {
@@ -243,8 +283,6 @@ void AppendLoopClosureObservations(
 std::unordered_map<point3D_t, Point3D> SubsampleTracks(
     const TrackSubsampleOptions& options,
     const std::unordered_set<image_t>& registered_image_ids,
-    const std::unordered_map<image_t, std::vector<double>>& depth_priors,
-    const std::unordered_map<image_t, std::vector<bool>>& depth_prior_validity,
     const std::unordered_map<point3D_t, Point3D>& tracks_full) {
   // Length filter: lower bound counts regular + LC observations; upper
   // bound counts regular only. The asymmetry is intentional.
@@ -276,12 +314,10 @@ std::unordered_map<point3D_t, Point3D> SubsampleTracks(
 
     // Restrict to selection domain + lc-elements that fall in the
     // selection domain.
-    std::unordered_set<image_t> distinct_image_ids;
     Point3D candidate;
     for (const auto& el : src.track.Elements()) {
       if (tracks_per_camera.count(el.image_id) == 0) continue;
       candidate.track.AddElement(el);
-      distinct_image_ids.insert(el.image_id);
     }
     for (const auto& lc_el : src.track.lc_elements) {
       if (tracks_per_camera.count(lc_el.image_id) == 0) continue;
@@ -290,23 +326,6 @@ std::unordered_map<point3D_t, Point3D> SubsampleTracks(
     if (candidate.track.Length() <
         static_cast<size_t>(options.min_num_views_per_track)) {
       continue;
-    }
-    if (options.two_view_depth_gate && distinct_image_ids.size() == 2) {
-      bool depth_ok = true;
-      for (const auto& el : candidate.track.Elements()) {
-        const auto valid_it = depth_prior_validity.find(el.image_id);
-        const auto prior_it = depth_priors.find(el.image_id);
-        if (valid_it == depth_prior_validity.end() ||
-            prior_it == depth_priors.end() ||
-            el.point2D_idx >= valid_it->second.size() ||
-            !valid_it->second[el.point2D_idx] ||
-            el.point2D_idx >= prior_it->second.size() ||
-            prior_it->second[el.point2D_idx] <= 1e-6) {
-          depth_ok = false;
-          break;
-        }
-      }
-      if (!depth_ok) continue;
     }
 
     // Greedy quota: a track is added if any element's PRE-increment
