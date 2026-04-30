@@ -70,6 +70,11 @@ void BindGlobalPositioner(py::module& m) {
               "Apply 0.5x ScaledLoss to BATA residuals from cameras whose "
               "focal length lacks an EXIF prior. Default true. Set false "
               "to disable the downweight.")
+          .def_readwrite(
+              "uncalibrated_loss_downweight",
+              &GlobalPositionerOptions::uncalibrated_loss_downweight,
+              "Scale factor applied to the loss of uncalibrated cameras when "
+              "apply_uncalibrated_loss_downweight is true. Default 0.5.")
           .def_property(
               "num_threads",
               [](const GlobalPositionerOptions& self) {

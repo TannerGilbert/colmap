@@ -48,6 +48,9 @@ struct GlobalPositionerOptions {
   // Apply 0.5x ScaledLoss to BATA residuals from cameras without an EXIF
   // focal-length prior.
   bool apply_uncalibrated_loss_downweight = true;
+  // Scale factor applied to the loss of uncalibrated cameras when
+  // apply_uncalibrated_loss_downweight is true.
+  double uncalibrated_loss_downweight = 0.5;
 
   // The options for the solver
   ceres::Solver::Options solver_options;
@@ -103,10 +106,8 @@ class GlobalPositioner {
   void AddPoint3DToProblem(point3D_t point3D_id,
                            Reconstruction& reconstruction);
 
-  // Add one observation; is_lc_observation selects the loss bucket.
   void AddObservationToProblem(point3D_t point3D_id,
                                const TrackElement& observation,
-                               bool is_lc_observation,
                                bool random_initialization,
                                Reconstruction& reconstruction);
 

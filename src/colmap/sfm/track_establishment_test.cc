@@ -351,8 +351,13 @@ void AddImagePairWithLC(CorrespondenceGraph& corr_graph,
                         const std::vector<std::pair<int, int>>& matches,
                         const std::vector<int>& inliers,
                         const std::vector<size_t>& lc_match_indices) {
+  // Register via AddTwoViewGeometry so ExtractMatchesBetweenImages works.
+  AddImagePair(corr_graph, image_id1, image_id2, matches, inliers);
+
+  // Populate extended fields on the ImagePair that AddTwoViewGeometry
+  // created.
   const image_pair_t pair_id = ImagePairToPairId(image_id1, image_id2);
-  CorrespondenceGraph::ImagePair image_pair(image_id1, image_id2);
+  auto& image_pair = corr_graph.MutableImagePairs().at(pair_id);
   Eigen::MatrixXi matches_mat(static_cast<int>(matches.size()), 2);
   for (size_t i = 0; i < matches.size(); ++i) {
     matches_mat(static_cast<int>(i), 0) = matches[i].first;
@@ -360,11 +365,9 @@ void AddImagePairWithLC(CorrespondenceGraph& corr_graph,
   }
   image_pair.matches = std::move(matches_mat);
   image_pair.inliers = inliers;
-  image_pair.num_matches = static_cast<point2D_t>(inliers.size());
   std::vector<bool> are_lc(matches.size(), false);
   for (const size_t row : lc_match_indices) are_lc[row] = true;
   image_pair.are_lc = std::move(are_lc);
-  corr_graph.MutableImagePairs().emplace(pair_id, std::move(image_pair));
 }
 
 // Helper: track contains (image_id, p2d_idx) as a regular element.
@@ -387,158 +390,141 @@ bool TrackHasLCElement(const Track& track,
   return false;
 }
 
-// Run the native + LC two-step end-to-end and return the populated tracks
-// dict.
+// Populate an LC-only ImagePair directly (no AddTwoViewGeometry). Use for
+// tests that call AppendLoopClosureObservations in isolation.
+void AddLCOnlyPair(CorrespondenceGraph& corr_graph,
+                   image_t image_id1,
+                   image_t image_id2,
+                   const std::vector<std::pair<int, int>>& matches,
+                   const std::vector<int>& inliers) {
+  const image_pair_t pair_id = ImagePairToPairId(image_id1, image_id2);
+  CorrespondenceGraph::ImagePair image_pair(image_id1, image_id2);
+  Eigen::MatrixXi matches_mat(static_cast<int>(matches.size()), 2);
+  for (size_t i = 0; i < matches.size(); ++i) {
+    matches_mat(static_cast<int>(i), 0) = matches[i].first;
+    matches_mat(static_cast<int>(i), 1) = matches[i].second;
+  }
+  image_pair.matches = std::move(matches_mat);
+  image_pair.inliers = inliers;
+  image_pair.are_lc.assign(matches.size(), true);
+  corr_graph.MutableImagePairs().emplace(pair_id, std::move(image_pair));
+}
+
+// Run the native + LC two-step end-to-end matching production code path:
+// MakeLoopClosureMatchPredicate suppresses LC-flagged observations from
+// union-find, then AppendLoopClosureObservations attaches them as
+// lc_elements.
 std::unordered_map<point3D_t, Point3D> EstablishFullTracks(
     const CorrespondenceGraph& corr_graph,
     const std::unordered_map<image_t, std::vector<Eigen::Vector2d>>& keypoints,
     const TrackEstablishmentOptions& options) {
   const auto pair_ids = CollectPairIds(corr_graph);
-  auto tracks =
-      EstablishTracksFromCorrGraph(pair_ids, corr_graph, keypoints, options);
+  auto ignore_match = MakeLoopClosureMatchPredicate(pair_ids, corr_graph);
+  TrackEstablishmentOptions opts = options;
+  opts.required_tracks_per_view = std::numeric_limits<int>::max();
+  auto tracks = EstablishTracksFromCorrGraph(
+      pair_ids, corr_graph, keypoints, opts, ignore_match);
   AppendLoopClosureObservations(pair_ids, corr_graph, tracks);
   return tracks;
 }
 
-// Both endpoints of the LC match already lie on existing native tracks, but
-// on DIFFERENT tracks. Expect reciprocal lc_elements added to both; tracks
-// stay separate (no merge).
+// Both endpoints of the LC match already lie on existing tracks (different
+// ones). Expect reciprocal lc_elements added; tracks stay separate.
 //
-// Setup: regular triangle (1,2,3) with feature i <-> feature i, plus a
-// regular pair (3,4) extending each feature-i track to image 4 -> 5 native
-// tracks of length 4. LC pair (1,4) with one match (img1:feat=0 <->
-// img4:feat=1): feat-0 chain holds img1:0; feat-1 chain holds img4:1.
-//
-// Drives EstablishTracksFromCorrGraph + AppendLoopClosureObservations.
+// Calls AppendLoopClosureObservations directly with pre-built tracks.
 TEST(ProcessLoopClosurePairs, BothExistingTracks) {
   CorrespondenceGraph corr_graph;
-  for (image_t i = 1; i <= 4; ++i) corr_graph.AddImage(i, 5);
+  corr_graph.AddImage(1, 5);
+  corr_graph.AddImage(2, 5);
 
-  std::vector<std::pair<int, int>> reg_matches;
-  std::vector<int> reg_inliers;
-  for (int i = 0; i < 5; ++i) {
-    reg_matches.emplace_back(i, i);
-    reg_inliers.push_back(i);
+  // LC pair (1,2) with cross-track match: img1:0 <-> img2:1.
+  AddLCOnlyPair(corr_graph, 1, 2, {{0, 1}}, {0});
+
+  // Pre-build two tracks with the LC endpoints on different tracks.
+  std::unordered_map<point3D_t, Point3D> tracks;
+  {
+    Point3D p;
+    p.track.AddElement(1, 0);
+    p.track.AddElement(3, 0);
+    tracks.emplace(0, std::move(p));
   }
-  AddImagePairWithLC(corr_graph, 1, 2, reg_matches, reg_inliers, {});
-  AddImagePairWithLC(corr_graph, 1, 3, reg_matches, reg_inliers, {});
-  AddImagePairWithLC(corr_graph, 2, 3, reg_matches, reg_inliers, {});
-  AddImagePairWithLC(corr_graph, 3, 4, reg_matches, reg_inliers, {});
-
-  // LC-only pair (1,4) with the cross-track match.
-  AddImagePairWithLC(corr_graph, 1, 4, {{0, 1}}, {0}, {0});
-
-  const auto kps = MakeWellSeparatedKeypoints({1, 2, 3, 4}, 5);
-
-  TrackEstablishmentOptions opts;
-  opts.min_num_views_per_track = 3;
-  opts.intra_image_consistency_threshold = 10.0;
-  const auto tracks = EstablishFullTracks(corr_graph, kps, opts);
-
-  // Native pass yields 5 tracks; LC pass adds reciprocal lc_elements
-  // without minting any new track.
-  EXPECT_EQ(tracks.size(), 5u);
-
-  // Locate the two native tracks the LC match's endpoints fall on.
-  const auto kInvalid = std::numeric_limits<point3D_t>::max();
-  point3D_t tid_a = kInvalid;
-  point3D_t tid_b = kInvalid;
-  for (const auto& [tid, p3d] : tracks) {
-    if (TrackHasElement(p3d.track, 1, 0)) tid_a = tid;
-    if (TrackHasElement(p3d.track, 4, 1)) tid_b = tid;
+  {
+    Point3D p;
+    p.track.AddElement(2, 1);
+    p.track.AddElement(3, 1);
+    tracks.emplace(1, std::move(p));
   }
-  ASSERT_NE(tid_a, kInvalid);
-  ASSERT_NE(tid_b, kInvalid);
-  EXPECT_NE(tid_a, tid_b) << "Tracks must remain separate (no merge).";
 
-  // Reciprocal lc_elements present.
-  EXPECT_TRUE(TrackHasLCElement(tracks.at(tid_a).track, 4, 1));
-  EXPECT_TRUE(TrackHasLCElement(tracks.at(tid_b).track, 1, 0));
+  std::vector<image_pair_t> pair_ids = {ImagePairToPairId(1, 2)};
+  AppendLoopClosureObservations(pair_ids, corr_graph, tracks);
 
-  // Sanity: the LC observation is NOT a regular element of either track.
-  EXPECT_FALSE(TrackHasElement(tracks.at(tid_a).track, 4, 1));
-  EXPECT_FALSE(TrackHasElement(tracks.at(tid_b).track, 1, 0));
+  // No new tracks minted.
+  EXPECT_EQ(tracks.size(), 2u);
+  // Reciprocal lc_elements.
+  EXPECT_TRUE(TrackHasLCElement(tracks.at(0).track, 2, 1));
+  EXPECT_TRUE(TrackHasLCElement(tracks.at(1).track, 1, 0));
+  // Not regular elements.
+  EXPECT_FALSE(TrackHasElement(tracks.at(0).track, 2, 1));
+  EXPECT_FALSE(TrackHasElement(tracks.at(1).track, 1, 0));
 }
 
-// Exactly one LC endpoint lies on an existing native track; the other side
-// is orphan. Expect lc_element added to the existing track; no new track is
-// minted.
+// Exactly one LC endpoint lies on an existing track; the other is orphan.
+// Expect lc_element added to the existing track; no new track minted.
 //
-// Drives EstablishTracksFromCorrGraph + AppendLoopClosureObservations.
+// Calls AppendLoopClosureObservations directly with pre-built tracks.
 TEST(ProcessLoopClosurePairs, OneExistingTrack) {
   CorrespondenceGraph corr_graph;
-  for (image_t i = 1; i <= 3; ++i) corr_graph.AddImage(i, 5);
-  corr_graph.AddImage(4, 5);  // image 4 has no regular pair -> orphan.
+  corr_graph.AddImage(1, 5);
+  corr_graph.AddImage(4, 5);
 
-  std::vector<std::pair<int, int>> reg_matches;
-  std::vector<int> reg_inliers;
-  for (int i = 0; i < 5; ++i) {
-    reg_matches.emplace_back(i, i);
-    reg_inliers.push_back(i);
+  // LC pair (1,4): img1:0 (on track) <-> img4:0 (orphan).
+  AddLCOnlyPair(corr_graph, 1, 4, {{0, 0}}, {0});
+
+  // Pre-build one track containing img1:0.
+  std::unordered_map<point3D_t, Point3D> tracks;
+  {
+    Point3D p;
+    p.track.AddElement(1, 0);
+    p.track.AddElement(2, 0);
+    p.track.AddElement(3, 0);
+    tracks.emplace(0, std::move(p));
   }
-  AddImagePairWithLC(corr_graph, 1, 2, reg_matches, reg_inliers, {});
-  AddImagePairWithLC(corr_graph, 1, 3, reg_matches, reg_inliers, {});
-  AddImagePairWithLC(corr_graph, 2, 3, reg_matches, reg_inliers, {});
 
-  // LC-only pair (1, 4): img1:feat=0 (on native track) <-> img4:feat=0
-  // (orphan).
-  AddImagePairWithLC(corr_graph, 1, 4, {{0, 0}}, {0}, {0});
+  std::vector<image_pair_t> pair_ids = {ImagePairToPairId(1, 4)};
+  AppendLoopClosureObservations(pair_ids, corr_graph, tracks);
 
-  const auto kps = MakeWellSeparatedKeypoints({1, 2, 3, 4}, 5);
-
-  TrackEstablishmentOptions opts;
-  opts.min_num_views_per_track = 3;
-  opts.intra_image_consistency_threshold = 10.0;
-  const auto tracks = EstablishFullTracks(corr_graph, kps, opts);
-
-  // 5 native tracks; no new track minted (one side already on a track).
-  EXPECT_EQ(tracks.size(), 5u);
-
-  bool found_track_a = false;
-  for (const auto& [tid, p3d] : tracks) {
-    if (TrackHasElement(p3d.track, 1, 0)) {
-      EXPECT_TRUE(TrackHasLCElement(p3d.track, 4, 0));
-      found_track_a = true;
-    }
-    // (img4, feat=0) should never be a regular element.
-    EXPECT_FALSE(TrackHasElement(p3d.track, 4, 0));
-  }
-  EXPECT_TRUE(found_track_a);
+  // No new track minted.
+  EXPECT_EQ(tracks.size(), 1u);
+  EXPECT_TRUE(TrackHasLCElement(tracks.at(0).track, 4, 0));
+  EXPECT_FALSE(TrackHasElement(tracks.at(0).track, 4, 0));
 }
 
-// Both LC endpoints are orphan (neither lives on a native track). Expect 2
-// new tracks minted, each with 1 regular element + the other side as
-// lc_element. Ids land at sequential positions past the native max.
+// Both LC endpoints are orphan (neither on any track). Expect 2 new tracks
+// minted, each with 1 regular element + the other side as lc_element.
 //
-// Drives EstablishTracksFromCorrGraph + AppendLoopClosureObservations.
+// Calls AppendLoopClosureObservations directly with pre-built tracks.
 TEST(ProcessLoopClosurePairs, NeitherExistingTrack) {
   CorrespondenceGraph corr_graph;
-  for (image_t i = 1; i <= 3; ++i) corr_graph.AddImage(i, 5);
-  // Images 4, 5 are orphan.
   corr_graph.AddImage(4, 5);
   corr_graph.AddImage(5, 5);
 
-  std::vector<std::pair<int, int>> reg_matches;
-  std::vector<int> reg_inliers;
-  for (int i = 0; i < 5; ++i) {
-    reg_matches.emplace_back(i, i);
-    reg_inliers.push_back(i);
+  // LC pair (4,5): img4:2 <-> img5:3. Neither endpoint on any track.
+  AddLCOnlyPair(corr_graph, 4, 5, {{2, 3}}, {0});
+
+  // Pre-build 5 native tracks on images 1-3 (not touching 4 or 5).
+  std::unordered_map<point3D_t, Point3D> tracks;
+  for (point3D_t tid = 0; tid < 5; ++tid) {
+    Point3D p;
+    p.track.AddElement(1, static_cast<point2D_t>(tid));
+    p.track.AddElement(2, static_cast<point2D_t>(tid));
+    p.track.AddElement(3, static_cast<point2D_t>(tid));
+    tracks.emplace(tid, std::move(p));
   }
-  AddImagePairWithLC(corr_graph, 1, 2, reg_matches, reg_inliers, {});
-  AddImagePairWithLC(corr_graph, 1, 3, reg_matches, reg_inliers, {});
-  AddImagePairWithLC(corr_graph, 2, 3, reg_matches, reg_inliers, {});
 
-  // LC-only pair (4, 5) carrying one match img4:feat=2 <-> img5:feat=3.
-  AddImagePairWithLC(corr_graph, 4, 5, {{2, 3}}, {0}, {0});
+  std::vector<image_pair_t> pair_ids = {ImagePairToPairId(4, 5)};
+  AppendLoopClosureObservations(pair_ids, corr_graph, tracks);
 
-  const auto kps = MakeWellSeparatedKeypoints({1, 2, 3, 4, 5}, 5);
-
-  TrackEstablishmentOptions opts;
-  opts.min_num_views_per_track = 3;
-  opts.intra_image_consistency_threshold = 10.0;
-  const auto tracks = EstablishFullTracks(corr_graph, kps, opts);
-
-  // 5 native tracks + 2 minted = 7.
+  // 5 native + 2 minted = 7.
   EXPECT_EQ(tracks.size(), 7u);
 
   const auto kInvalid = std::numeric_limits<point3D_t>::max();
@@ -550,75 +536,58 @@ TEST(ProcessLoopClosurePairs, NeitherExistingTrack) {
   }
   ASSERT_NE(tid_for_4_2, kInvalid);
   ASSERT_NE(tid_for_5_3, kInvalid);
-  // Native ids are dense [0, 5); minted ids must be >= 5.
   EXPECT_GE(tid_for_4_2, 5u);
   EXPECT_GE(tid_for_5_3, 5u);
-  // Sequential — they differ by exactly 1.
   const point3D_t lo = std::min(tid_for_4_2, tid_for_5_3);
   const point3D_t hi = std::max(tid_for_4_2, tid_for_5_3);
   EXPECT_EQ(hi, lo + 1);
 
-  // Each minted track has exactly 1 regular element + 1 lc_element.
-  const auto& track_a = tracks.at(tid_for_4_2).track;
-  EXPECT_EQ(track_a.Length(), 1u);
-  EXPECT_EQ(track_a.lc_elements.size(), 1u);
-  EXPECT_TRUE(TrackHasLCElement(track_a, 5, 3));
+  EXPECT_EQ(tracks.at(tid_for_4_2).track.Length(), 1u);
+  EXPECT_EQ(tracks.at(tid_for_4_2).track.lc_elements.size(), 1u);
+  EXPECT_TRUE(TrackHasLCElement(tracks.at(tid_for_4_2).track, 5, 3));
 
-  const auto& track_b = tracks.at(tid_for_5_3).track;
-  EXPECT_EQ(track_b.Length(), 1u);
-  EXPECT_EQ(track_b.lc_elements.size(), 1u);
-  EXPECT_TRUE(TrackHasLCElement(track_b, 4, 2));
+  EXPECT_EQ(tracks.at(tid_for_5_3).track.Length(), 1u);
+  EXPECT_EQ(tracks.at(tid_for_5_3).track.lc_elements.size(), 1u);
+  EXPECT_TRUE(TrackHasLCElement(tracks.at(tid_for_5_3).track, 4, 2));
 }
 
-// Multiple LC matches across multiple pairs. The internal obs_to_track
-// lookup must be updated as each new track is minted so subsequent LC pairs
-// find them — otherwise we'd double-mint and end up with 4 minted tracks
-// instead of 2.
+// Multiple LC matches across multiple pairs sharing an observation.
+// obs_to_track must be updated as tracks are minted so the second pair
+// hits OneExistingTrack rather than re-minting.
 //
-// Setup: regular triangle on (1,2,3) -> 5 native tracks. Then LC pairs
-// (4,5) and (5,6), each with one LC match. The two pairs share the
-// observation (img5:feat=0). Whichever pair runs first mints a track for
-// (img5:feat=0); the second pair must hit "OneExistingTrack" via that
-// observation rather than re-mint.
-//
-// Drives EstablishTracksFromCorrGraph + AppendLoopClosureObservations.
+// Calls AppendLoopClosureObservations directly with pre-built tracks.
 TEST(ProcessLoopClosurePairs, MultipleLCMatchesAcrossPairs) {
   CorrespondenceGraph corr_graph;
-  for (image_t i = 1; i <= 6; ++i) corr_graph.AddImage(i, 5);
+  for (image_t i = 4; i <= 6; ++i) corr_graph.AddImage(i, 5);
 
-  std::vector<std::pair<int, int>> reg_matches;
-  std::vector<int> reg_inliers;
-  for (int i = 0; i < 5; ++i) {
-    reg_matches.emplace_back(i, i);
-    reg_inliers.push_back(i);
+  // Two LC pairs sharing img5:0.
+  AddLCOnlyPair(corr_graph, 4, 5, {{0, 0}}, {0});
+  AddLCOnlyPair(corr_graph, 5, 6, {{0, 0}}, {0});
+
+  // Pre-build 5 native tracks on images 1-3 (not touching 4-6).
+  std::unordered_map<point3D_t, Point3D> tracks;
+  for (point3D_t tid = 0; tid < 5; ++tid) {
+    Point3D p;
+    p.track.AddElement(1, static_cast<point2D_t>(tid));
+    p.track.AddElement(2, static_cast<point2D_t>(tid));
+    p.track.AddElement(3, static_cast<point2D_t>(tid));
+    tracks.emplace(tid, std::move(p));
   }
-  AddImagePairWithLC(corr_graph, 1, 2, reg_matches, reg_inliers, {});
-  AddImagePairWithLC(corr_graph, 1, 3, reg_matches, reg_inliers, {});
-  AddImagePairWithLC(corr_graph, 2, 3, reg_matches, reg_inliers, {});
 
-  AddImagePairWithLC(corr_graph, 4, 5, {{0, 0}}, {0}, {0});
-  AddImagePairWithLC(corr_graph, 5, 6, {{0, 0}}, {0}, {0});
+  std::vector<image_pair_t> pair_ids = {
+      ImagePairToPairId(4, 5), ImagePairToPairId(5, 6)};
+  AppendLoopClosureObservations(pair_ids, corr_graph, tracks);
 
-  const auto kps = MakeWellSeparatedKeypoints({1, 2, 3, 4, 5, 6}, 5);
-
-  TrackEstablishmentOptions opts;
-  opts.min_num_views_per_track = 3;
-  opts.intra_image_consistency_threshold = 10.0;
-  const auto tracks = EstablishFullTracks(corr_graph, kps, opts);
-
-  // 5 native + (2 minted from first LC pair processed) + (0 minted from
-  // second LC pair, "OneExistingTrack" branch on img5:feat=0) = 7.
-  // Without the obs_to_track update, the second pair would mint two more
-  // tracks (or one, depending on order) and we'd see 8 or 9.
+  // First pair: neither on track → mint 2 (img4:0, img5:0).
+  // Second pair: img5:0 now on minted track → OneExistingTrack, no mint.
+  // Total: 5 + 2 = 7.
   EXPECT_EQ(tracks.size(), 7u);
 
-  // (img5, feat=0) appears as a regular element exactly once across the
-  // minted tracks.
-  int count_5_0_regular = 0;
+  int count_5_0 = 0;
   for (const auto& [tid, p3d] : tracks) {
-    if (TrackHasElement(p3d.track, 5, 0)) ++count_5_0_regular;
+    if (TrackHasElement(p3d.track, 5, 0)) ++count_5_0;
   }
-  EXPECT_EQ(count_5_0_regular, 1);
+  EXPECT_EQ(count_5_0, 1);
 }
 
 // Smoke test: native produces 10 dense tracks (ids in [0, 10)); minted ids
@@ -660,6 +629,82 @@ TEST(ProcessLoopClosurePairs, SequentialIdsNoCollision) {
       EXPECT_GE(tid, 10u) << "minted id " << tid << " collided with native";
     }
   }
+}
+
+// Both LC endpoints fall on the SAME native track. This is a degenerate
+// case (self-loop) — AppendLoopClosureObservations should skip it silently
+// rather than adding the observation as an lc_element of itself.
+//
+// Setup: regular triangle (1,2,3) → 5 native tracks. LC pair (1,2) with
+// match (img1:feat=0 <-> img2:feat=0) — both endpoints already on the
+// same track (the feat-0 chain includes both img1 and img2).
+//
+// Drives EstablishTracksFromCorrGraph + AppendLoopClosureObservations.
+// Both LC endpoints already live on the SAME native track. The code skips
+// this case (``t1 == t2``) — no lc_elements should be added. Tested by
+// calling AppendLoopClosureObservations directly with a pre-built tracks
+// dict, bypassing MakeLoopClosureMatchPredicate (which would suppress the
+// observations from union-find).
+TEST(ProcessLoopClosurePairs, BothSameTrack) {
+  CorrespondenceGraph corr_graph;
+  corr_graph.AddImage(1, 5);
+  corr_graph.AddImage(2, 5);
+
+  // Populate an LC-only pair directly (no AddTwoViewGeometry needed since
+  // we call AppendLoopClosureObservations directly, not EstablishFullTracks).
+  const image_pair_t pair_id = ImagePairToPairId(1, 2);
+  CorrespondenceGraph::ImagePair image_pair(1, 2);
+  Eigen::MatrixXi matches_mat(1, 2);
+  matches_mat(0, 0) = 0;
+  matches_mat(0, 1) = 0;
+  image_pair.matches = std::move(matches_mat);
+  image_pair.inliers = {0};
+  image_pair.are_lc = {true};
+  corr_graph.MutableImagePairs().emplace(pair_id, std::move(image_pair));
+
+  // Pre-build a single track containing both LC endpoints.
+  std::unordered_map<point3D_t, Point3D> tracks;
+  Point3D p;
+  p.track.AddElement(1, 0);
+  p.track.AddElement(2, 0);
+  tracks.emplace(0, std::move(p));
+
+  std::vector<image_pair_t> pair_ids = {pair_id};
+  AppendLoopClosureObservations(pair_ids, corr_graph, tracks);
+
+  // No new tracks minted, no lc_elements added (same-track skip).
+  EXPECT_EQ(tracks.size(), 1u);
+  EXPECT_EQ(tracks.at(0).track.lc_elements.size(), 0u);
+}
+
+// ============================================================================
+// SubsampleTracks: max_num_tracks limit
+// ============================================================================
+
+// Verify that ``max_num_tracks`` stops the greedy subsample early.
+TEST(FindTracksForProblem, MaxNumTracksLimit) {
+  std::unordered_map<image_t, Image> images;
+  for (image_t i = 1; i <= 3; ++i) {
+    images.emplace(i, MakeRegisteredImage(i, 10));
+  }
+
+  std::unordered_map<point3D_t, Point3D> tracks_full;
+  for (point2D_t f = 0; f < 10; ++f) {
+    tracks_full.emplace(f,
+                        MakePoint3DFromElements({{1, f}, {2, f}, {3, f}}));
+  }
+
+  const auto reg_ids = MakeRegisteredImageIds(images);
+
+  TrackSubsampleOptions options;
+  options.min_num_views_per_track = 2;
+  options.required_tracks_per_view = 1000;
+  options.max_num_tracks = 3;
+  const auto selected = SubsampleTracks(options, reg_ids, tracks_full);
+  // The break fires AFTER inserting when size > max_num_tracks, so we
+  // may get max_num_tracks + 1. The key assertion: not all 10 are kept.
+  EXPECT_LE(static_cast<int>(selected.size()), options.max_num_tracks + 1);
+  EXPECT_LT(selected.size(), tracks_full.size());
 }
 
 }  // namespace

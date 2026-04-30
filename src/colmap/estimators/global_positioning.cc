@@ -151,7 +151,9 @@ void GlobalPositioner::AddPointToCameraConstraints(
   // Down-weight uncalibrated cameras.
   if (options_.apply_uncalibrated_loss_downweight) {
     loss_function_ptcam_uncalibrated_ = std::make_shared<ceres::ScaledLoss>(
-        loss_function_.get(), 0.5, ceres::DO_NOT_TAKE_OWNERSHIP);
+        loss_function_.get(),
+        options_.uncalibrated_loss_downweight,
+        ceres::DO_NOT_TAKE_OWNERSHIP);
   } else {
     loss_function_ptcam_uncalibrated_ = loss_function_;
   }
@@ -189,7 +191,6 @@ void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
   for (const auto& observation : point3D.track.Elements()) {
     AddObservationToProblem(point3D_id,
                             observation,
-                            /*is_lc_observation=*/false,
                             random_initialization,
                             reconstruction);
   }
@@ -197,7 +198,6 @@ void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
     for (const auto& observation : point3D.track.lc_elements) {
       AddObservationToProblem(point3D_id,
                               observation,
-                              /*is_lc_observation=*/true,
                               random_initialization,
                               reconstruction);
     }
@@ -206,7 +206,6 @@ void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
 
 void GlobalPositioner::AddObservationToProblem(point3D_t point3D_id,
                                                const TrackElement& observation,
-                                               bool is_lc_observation,
                                                bool random_initialization,
                                                Reconstruction& reconstruction) {
   Point3D& point3D = reconstruction.Point3D(point3D_id);
