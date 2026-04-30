@@ -69,7 +69,7 @@ struct RotationEstimatorOptions {
   double max_rotation_error_deg = 10.0;
 
   // Drop pairs where LC inliers exceed tracking inliers.
-  bool skip_risky_LC_pairs = false;
+  bool skip_risky_lc_pairs = false;
 
   // Use Ceres solver with per-pair Huber/Cauchy loss instead of L1+IRLS.
   // Mutually exclusive with use_gravity.

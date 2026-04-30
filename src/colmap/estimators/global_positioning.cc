@@ -185,7 +185,7 @@ void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
   }
 
   // Walk regular elements then LC elements as separate passes — they
-  // share the residual layout but route to different cascade buckets.
+  // share the residual layout but use different loss function groups.
   for (const auto& observation : point3D.track.Elements()) {
     AddObservationToProblem(point3D_id,
                             observation,
@@ -368,7 +368,7 @@ void GlobalPositioner::ParameterizeVariables(Reconstruction& reconstruction) {
     }
   }
 
-  // If do not optimize the rotations, set the camera rotations to be constant
+  // If do not optimize the points, set the points to be constant
   if (!options_.optimize_points) {
     for (const auto& [point3D_id, point3D] : reconstruction.Points3D()) {
       if (problem_->HasParameterBlock(point3D.xyz.data())) {

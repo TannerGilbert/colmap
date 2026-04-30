@@ -94,16 +94,8 @@ image_t ComputeMaximumPoseGraphSpanningTree(
                   ? static_cast<float>(cg_pair_ptr->inliers.size())
                   : static_cast<float>(edge.num_matches);
     if (prioritize_tracking && cg_pair_ptr != nullptr &&
-        !cg_pair_ptr->inliers.empty() && !cg_pair_ptr->are_lc.empty()) {
-      size_t lc_count = 0;
-      for (const auto idx : cg_pair_ptr->inliers) {
-        if (idx < cg_pair_ptr->are_lc.size() && cg_pair_ptr->are_lc[idx]) {
-          ++lc_count;
-        }
-      }
-      if (lc_count > cg_pair_ptr->inliers.size() - lc_count) {
-        w -= kLCPenalty;
-      }
+        !IsTrackingPair(*cg_pair_ptr)) {
+      w -= kLCPenalty;
     }
     weights.push_back(w);
   }

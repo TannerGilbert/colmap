@@ -12,9 +12,7 @@
 #include <ceres/rotation.h>
 
 namespace colmap {
-namespace {
 
-// True if non-LC inliers >= LC inliers.
 bool IsTrackingPair(const CorrespondenceGraph::ImagePair& image_pair) {
   if (image_pair.inliers.empty()) return false;
   size_t lc_count = 0;
@@ -25,6 +23,8 @@ bool IsTrackingPair(const CorrespondenceGraph::ImagePair& image_pair) {
   }
   return image_pair.inliers.size() - lc_count >= lc_count;
 }
+
+namespace {
 
 // Computes the 1-DOF residual for gravity-aligned rotation constraints.
 // Returns (angle_2 - angle_1) - angle_12, wrapped to [-π, π] with jitter
@@ -98,9 +98,9 @@ RotationAveragingProblem::RotationAveragingProblem(
     const CorrespondenceGraph* correspondence_graph)
     : options_(options),
       correspondence_graph_(correspondence_graph) {
-  // skip_risky_LC_pairs requires a CorrespondenceGraph.
-  THROW_CHECK(!options_.skip_risky_LC_pairs || correspondence_graph_ != nullptr)
-      << "skip_risky_LC_pairs=true requires correspondence_graph; got nullptr";
+  // skip_risky_lc_pairs requires a CorrespondenceGraph.
+  THROW_CHECK(!options_.skip_risky_lc_pairs || correspondence_graph_ != nullptr)
+      << "skip_risky_lc_pairs=true requires correspondence_graph; got nullptr";
   // Derive active_frame_ids from active_image_ids, and cache mappings.
   for (const image_t image_id : active_image_ids) {
     const auto& image = reconstruction.Image(image_id);
@@ -251,22 +251,12 @@ void RotationAveragingProblem::BuildPairConstraints(
     const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
 
     // Skip LC-dominated pairs.
-    if (options_.skip_risky_LC_pairs && correspondence_graph_ != nullptr) {
+    if (options_.skip_risky_lc_pairs && correspondence_graph_ != nullptr) {
       const auto& cg_map = correspondence_graph_->ImagePairsMap();
       auto cg_pair_it = cg_map.find(pair_id);
-      if (cg_pair_it != cg_map.end()) {
-        const auto& cg_pair = cg_pair_it->second;
-        if (!cg_pair.inliers.empty() && !cg_pair.are_lc.empty()) {
-          size_t lc_count = 0;
-          for (const auto idx : cg_pair.inliers) {
-            if (idx < cg_pair.are_lc.size() && cg_pair.are_lc[idx]) {
-              ++lc_count;
-            }
-          }
-          if (lc_count > cg_pair.inliers.size() - lc_count) {
-            continue;
-          }
-        }
+      if (cg_pair_it != cg_map.end() &&
+          !IsTrackingPair(cg_pair_it->second)) {
+        continue;
       }
     }
 
@@ -746,7 +736,7 @@ bool RotationAveragingSolver::SolveL1Regression(
             options_.l1_step_convergence_threshold ||
         std::abs(prev_norm - curr_norm) < kEps) {
       if (std::abs(prev_norm - curr_norm) < kEps)
-        LOG(INFO) << "std::abs(prev_norm - curr_norm) < " << kEps;
+        VLOG(2) << "std::abs(prev_norm - curr_norm) < " << kEps;
       iteration++;
       break;
     }

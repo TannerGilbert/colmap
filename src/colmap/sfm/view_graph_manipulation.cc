@@ -116,8 +116,8 @@ void DecomposeRelPose(CorrespondenceGraph& view_graph,
         image_pair.two_view_geometry.config = TwoViewGeometry::CALIBRATED;
         return;
       }
-      // (Already filtered to prior-calibrated pairs above, so the second
-      // glomap branch — the early-return-without-prior-focal — never fires.)
+      // (Already filtered to prior-calibrated pairs above, so the
+      // early-return-without-prior-focal path never fires.)
 
       // Normalize translation to unit norm when non-zero.
       auto& tvg = image_pair.two_view_geometry;

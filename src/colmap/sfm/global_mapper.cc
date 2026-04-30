@@ -177,8 +177,8 @@ void GlobalMapper::SubsampleTracksForProblem(
   opts.two_view_depth_gate = options.track_two_view_depth_gate;
 
   // Extract registered image set from the reconstruction.
-  // Depth-prior maps are empty on this branch (populated by the depth
-  // extension); pass empty containers to SubsampleTracks.
+  // Depth-prior maps are empty here (populated by optional depth extension);
+  // pass empty containers to SubsampleTracks.
   std::unordered_set<image_t> registered_image_ids;
   std::unordered_map<image_t, std::vector<double>> depth_priors;
   std::unordered_map<image_t, std::vector<bool>> depth_prior_validity;

@@ -164,9 +164,6 @@ class Image {
   // Whether this image is currently registered.
   bool is_registered = false;
 
-  // FORK-REMOVAL TODO: features / features_undist are fork-only.
-  // See .claude/notes/glomap_audit/fork_removal_todo.md.
-
   // Raw 2D keypoints (xy), separate from points2D_.
   std::vector<Eigen::Vector2d> features;
   // Undistorted 3D rays per feature.

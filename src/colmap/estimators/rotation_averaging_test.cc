@@ -343,7 +343,7 @@ TEST(RotationAveraging, GravityWithUnknownRigSensorsReturnsFalse) {
                                            data.reconstruction));
 }
 
-// ---- LC-penalty branch inside ComputeMaximumPoseGraphSpanningTree.
+// LC-penalty branch inside ComputeMaximumPoseGraphSpanningTree.
 //
 // With ``prioritize_tracking=false`` the MST runs vanilla maximum-weight
 // Kruskal. With ``prioritize_tracking=true`` it subtracts
@@ -555,9 +555,7 @@ TEST(RotationAveraging, InitializeSensorFromRigUsingCamsFromWorld) {
   }
 }
 
-// =============================================================================
 // RelativeRotationError functor tests (video-aware Ceres path).
-// =============================================================================
 
 namespace {
 

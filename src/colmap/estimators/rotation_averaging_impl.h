@@ -12,6 +12,9 @@
 
 namespace colmap {
 
+// True if non-LC inliers >= LC inliers (i.e. the pair is tracking-dominated).
+bool IsTrackingPair(const CorrespondenceGraph::ImagePair& image_pair);
+
 // AutoDiff relative rotation error for the video-Ceres path.
 // Residual = AngleAxis(R2^T * R_rel * R1), all 3-DOF angle-axis.
 struct RelativeRotationError {
@@ -100,8 +103,7 @@ class RotationAveragingProblem {
     return pair_constraints_;
   }
 
-
-  // Accessors for the video-Ceres path (gated on !use_gravity).
+  // Accessors for the Ceres solver path (gated on !use_gravity).
   Eigen::VectorXd& MutableEstimatedRotations() { return estimated_rotations_; }
   const std::unordered_map<frame_t, int>& FrameIdToParamIdx() const {
     return frame_id_to_param_idx_;
@@ -161,7 +163,6 @@ class RotationAveragingProblem {
 
   // Active frames for the current solve.
   std::unordered_set<frame_t> active_frame_ids_;
-
 
   // For per-pair LC fields (inliers, are_lc) not carried by PoseGraph::Edge.
   const CorrespondenceGraph* correspondence_graph_ = nullptr;

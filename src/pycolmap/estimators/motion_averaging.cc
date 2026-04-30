@@ -54,10 +54,9 @@ void BindGlobalPositioner(py::module& m) {
           .def_readwrite("random_seed",
                          &GlobalPositionerOptions::random_seed,
                          "PRNG seed for random initialization. Default -1 "
-                         "(non-deterministic random_device, matches upstream "
-                         "colmap4). When -1 the ctor honors a GP_SEED env "
-                         "var as a documented escape for byte-identity "
-                         "recipes; set explicitly (>=0) to override.")
+                         "(non-deterministic random_device). When -1 the "
+                         "ctor honors a GP_SEED env var for deterministic "
+                         "reproducibility; set explicitly (>=0) to override.")
           .def_readwrite("loss",
                          &GlobalPositionerOptions::loss,
                          "Top-level robust loss applied to the BATA "
@@ -350,8 +349,8 @@ void BindRotationEstimator(py::module& m) {
               "(degrees).")
           // --- Video / loop-closure extensions ---
           .def_readwrite(
-              "skip_risky_LC_pairs",
-              &RotationEstimatorOptions::skip_risky_LC_pairs,
+              "skip_risky_lc_pairs",
+              &RotationEstimatorOptions::skip_risky_lc_pairs,
               "Drop pairs whose LC inliers exceed non-LC inliers.")
           .def_readwrite(
               "use_video_constraints",
@@ -412,7 +411,7 @@ void BindRotationEstimator(py::module& m) {
       "Returns True if rotation averaging succeeded. When "
       "``extract_final_weights=True``, returns ``{success, final_weights}`` "
       "dict instead. ``correspondence_graph`` is required when "
-      "``options.skip_risky_LC_pairs=True`` so the LC-majority filter can "
+      "``options.skip_risky_lc_pairs=True`` so the LC-majority filter can "
       "read ImagePair.{inliers, are_lc} (PoseGraph::Edge does not carry "
       "them).");
 }

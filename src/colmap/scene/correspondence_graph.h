@@ -66,7 +66,7 @@ class CorrespondenceGraph {
   };
 
   // Two-view image pair with geometry, matches, and metadata.
-  // Extends colmap core with glomap additions: image IDs, validity flags,
+  // Extends colmap core with image IDs, validity flags,
   // loop closure markers, covariance, and full match data.
   struct ImagePair {
     // Default constructor.
@@ -78,7 +78,7 @@ class CorrespondenceGraph {
           image_id2(img_id2),
           pair_id(ImagePairToPairId(img_id1, img_id2)) {}
 
-    // Image identifiers (colmap upstream + glomap additions).
+    // Image identifiers.
     image_t image_id1 = kInvalidImageId;
     image_t image_id2 = kInvalidImageId;
 
@@ -88,13 +88,11 @@ class CorrespondenceGraph {
     // Indicator whether the image pair is valid.
     bool is_valid = true;
 
-    // The number of inlier matches between pairs of images (colmap upstream).
+    // The number of inlier matches between pairs of images.
     point2D_t num_matches = 0;
 
-    // The two-view geometry of the image pair without matches (colmap upstream).
+    // The two-view geometry of the image pair without matches.
     struct TwoViewGeometry two_view_geometry;
-
-    // --- glomap additions below ---
 
     // Weight is the initial inlier rate.
     double weight = 0.0;
@@ -206,7 +204,7 @@ class CorrespondenceGraph {
     return image_pairs_;
   }
   // Const accessor for the internal image_pairs map. RA's
-  // skip_risky_LC_pairs path uses this to read ImagePair.{inliers, are_lc}
+  // skip_risky_lc_pairs path uses this to read ImagePair.{inliers, are_lc}
   // without taking mutable access.
   inline const std::unordered_map<image_pair_t, ImagePair>& ImagePairsMap()
       const {
