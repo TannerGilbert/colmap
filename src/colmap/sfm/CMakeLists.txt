@@ -85,3 +85,8 @@ COLMAP_ADD_TEST(
     SRCS track_filter_test.cc
     LINK_LIBS colmap_sfm
 )
+COLMAP_ADD_TEST(
+    NAME image_pair_inliers_test
+    SRCS image_pair_inliers_test.cc
+    LINK_LIBS colmap_sfm
+)

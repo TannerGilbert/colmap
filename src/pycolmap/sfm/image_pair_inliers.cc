@@ -26,7 +26,19 @@ void BindImagePairInliers(py::module& m) {
           .def_readwrite("max_epipolar_error_H",
                          &InlierThresholdOptions::max_epipolar_error_H)
           .def_readwrite("min_angle_from_epipole",
-                         &InlierThresholdOptions::min_angle_from_epipole);
+                         &InlierThresholdOptions::min_angle_from_epipole)
+          .def_readwrite("max_angle_error",
+                         &InlierThresholdOptions::max_angle_error)
+          .def_readwrite("max_reprojection_error",
+                         &InlierThresholdOptions::max_reprojection_error)
+          .def_readwrite("min_triangulation_angle",
+                         &InlierThresholdOptions::min_triangulation_angle)
+          .def_readwrite("min_inlier_num",
+                         &InlierThresholdOptions::min_inlier_num)
+          .def_readwrite("min_inlier_ratio",
+                         &InlierThresholdOptions::min_inlier_ratio)
+          .def_readwrite("max_rotation_error",
+                         &InlierThresholdOptions::max_rotation_error);
   MakeDataclass(PyOpts);
 
   m.def(
@@ -36,7 +48,8 @@ void BindImagePairInliers(py::module& m) {
          const InlierThresholdOptions& options,
          bool clean_inliers) {
         py::gil_scoped_release release;
-        ImagePairsInlierCount(correspondence_graph, rec, options, clean_inliers);
+        ImagePairsInlierCount(
+            correspondence_graph, rec, options, clean_inliers);
       },
       "correspondence_graph"_a,
       "rec"_a,

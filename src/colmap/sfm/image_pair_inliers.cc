@@ -67,6 +67,7 @@ class ImagePairInliers {
   void ScoreErrorEssential();
   void ScoreErrorFundamental();
   void ScoreErrorHomography();
+  void ValidateMatchIndices(bool use_undistorted_features) const;
 
   CorrespondenceGraph::ImagePair& image_pair;
   const Reconstruction& rec;
@@ -88,9 +89,29 @@ void ImagePairInliers::ScoreError() {
   }
 }
 
+void ImagePairInliers::ValidateMatchIndices(
+    const bool use_undistorted_features) const {
+  THROW_CHECK_EQ(image_pair.matches.cols(), 2);
+  const Image& image1 = rec.Image(image_pair.image_id1);
+  const Image& image2 = rec.Image(image_pair.image_id2);
+  const size_t num_features1 = use_undistorted_features
+                                   ? image1.features_undist.size()
+                                   : image1.features.size();
+  const size_t num_features2 = use_undistorted_features
+                                   ? image2.features_undist.size()
+                                   : image2.features.size();
+  for (Eigen::Index k = 0; k < image_pair.matches.rows(); ++k) {
+    const int idx1 = image_pair.matches(k, 0);
+    const int idx2 = image_pair.matches(k, 1);
+    THROW_CHECK_GE(idx1, 0);
+    THROW_CHECK_GE(idx2, 0);
+    THROW_CHECK_LT(static_cast<size_t>(idx1), num_features1);
+    THROW_CHECK_LT(static_cast<size_t>(idx2), num_features2);
+  }
+}
+
 void ImagePairInliers::ScoreErrorEssential() {
-  const Rigid3d& cam2_from_cam1 =
-      *image_pair.two_view_geometry.cam2_from_cam1;
+  const Rigid3d& cam2_from_cam1 = *image_pair.two_view_geometry.cam2_from_cam1;
   const Eigen::Matrix3d E = EssentialMatrixFromPose(cam2_from_cam1);
 
   // eij = camera i on image j
@@ -106,6 +127,7 @@ void ImagePairInliers::ScoreErrorEssential() {
   if (image_pair.inliers.size() > 0) {
     image_pair.inliers.clear();
   }
+  ValidateMatchIndices(/*use_undistorted_features=*/true);
 
   const image_t image_id1 = image_pair.image_id1;
   const image_t image_id2 = image_pair.image_id2;
@@ -137,7 +159,8 @@ void ImagePairInliers::ScoreErrorEssential() {
     if (!CheckCheirality(cam2_from_cam1, pt1, pt2, 1e-2, 100.)) continue;
 
     // Angle gate (placeholder; currently disabled).
-    const double diff_angle = pt1.dot(cam2_from_cam1.rotation().inverse() * pt2);
+    const double diff_angle =
+        pt1.dot(cam2_from_cam1.rotation().inverse() * pt2);
     if (diff_angle >= thres_angle) continue;
 
     // Epipole gate.
@@ -155,10 +178,12 @@ void ImagePairInliers::ScoreErrorFundamental() {
   if (image_pair.inliers.size() > 0) {
     image_pair.inliers.clear();
   }
+  ValidateMatchIndices(/*use_undistorted_features=*/false);
 
-  Eigen::Vector3d epipole = (*image_pair.two_view_geometry.F)
-                                .row(0)
-                                .cross((*image_pair.two_view_geometry.F).row(2));
+  Eigen::Vector3d epipole =
+      (*image_pair.two_view_geometry.F)
+          .row(0)
+          .cross((*image_pair.two_view_geometry.F).row(2));
   bool status = false;
   for (auto i = 0; i < 3; i++) {
     if ((epipole(i) > EPS) || (epipole(i) < -EPS)) {
@@ -189,10 +214,8 @@ void ImagePairInliers::ScoreErrorFundamental() {
         rec.Image(image_id1).features[image_pair.matches(k, 0)];
     const Eigen::Vector2d pt2 =
         rec.Image(image_id2).features[image_pair.matches(k, 1)];
-    const double r2 =
-        ComputeSquaredSampsonError(pt1.homogeneous(),
-                                   pt2.homogeneous(),
-                                   *image_pair.two_view_geometry.F);
+    const double r2 = ComputeSquaredSampsonError(
+        pt1.homogeneous(), pt2.homogeneous(), *image_pair.two_view_geometry.F);
 
     if (r2 >= sq_threshold) continue;
 
@@ -221,6 +244,7 @@ void ImagePairInliers::ScoreErrorHomography() {
   if (image_pair.inliers.size() > 0) {
     image_pair.inliers.clear();
   }
+  ValidateMatchIndices(/*use_undistorted_features=*/false);
 
   const image_t image_id1 = image_pair.image_id1;
   const image_t image_id2 = image_pair.image_id2;
@@ -249,8 +273,7 @@ void ImagePairsInlierCount(CorrespondenceGraph& correspondence_graph,
                            const Reconstruction& rec,
                            const InlierThresholdOptions& options,
                            bool clean_inliers) {
-  for (auto& [pair_id, image_pair] :
-       correspondence_graph.MutableImagePairs()) {
+  for (auto& [pair_id, image_pair] : correspondence_graph.MutableImagePairs()) {
     if (!clean_inliers && image_pair.inliers.size() > 0) continue;
     image_pair.inliers.clear();
 
