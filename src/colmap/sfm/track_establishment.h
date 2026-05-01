@@ -33,9 +33,10 @@ struct TrackEstablishmentOptions {
 // point2D_idx2). Returns true to skip (ignore) the match.
 using MatchPredicate = std::function<bool(image_t, point2D_t, image_t, point2D_t)>;
 
-// Returns a MatchPredicate that ignores matches flagged as LC (are_lc==true)
-// in the correspondence graph, so they are excluded from the first-pass
-// union-find and only incorporated via AppendLoopClosureObservations.
+// Returns a MatchPredicate that ignores exact LC-flagged inlier matches
+// (are_lc==true) in the correspondence graph. This excludes LC pairwise
+// constraints from the first-pass union-find while still allowing the same
+// endpoints to participate in regular tracks through non-LC matches.
 MatchPredicate MakeLoopClosureMatchPredicate(
     const std::vector<image_pair_t>& valid_pair_ids,
     const CorrespondenceGraph& corr_graph);
