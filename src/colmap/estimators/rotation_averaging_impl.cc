@@ -17,7 +17,8 @@ bool IsTrackingPair(const CorrespondenceGraph::ImagePair& image_pair) {
   if (image_pair.inliers.empty()) return false;
   size_t lc_count = 0;
   for (const auto idx : image_pair.inliers) {
-    if (idx < image_pair.are_lc.size() && image_pair.are_lc[idx]) {
+    if (idx >= 0 && static_cast<size_t>(idx) < image_pair.are_lc.size() &&
+        image_pair.are_lc[idx]) {
       ++lc_count;
     }
   }
