@@ -23,9 +23,11 @@ namespace {
 // Build a simple PINHOLE camera. ``has_prior`` controls the calibrated/uncalib
 // branch in FilterTracksByAngle (calibrated => threshold; uncalibrated => 2x).
 Camera MakePinholeCamera(camera_t camera_id, bool has_prior) {
-  Camera camera = Camera::CreateFromModelName(
-      camera_id, "PINHOLE", /*focal_length=*/100.0,
-      /*width=*/200, /*height=*/200);
+  Camera camera = Camera::CreateFromModelName(camera_id,
+                                              "PINHOLE",
+                                              /*focal_length=*/100.0,
+                                              /*width=*/200,
+                                              /*height=*/200);
   camera.has_prior_focal_length = has_prior;
   return camera;
 }
@@ -84,8 +86,8 @@ TEST(TrackFilter, FilterByAngle_AlignedRaysKept) {
 
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
-  const int touched = FilterTracksByAngle(
-      view_graph, rec, tracks, /*max_angle_error=*/1.0);
+  const int touched =
+      FilterTracksByAngle(view_graph, rec, tracks, /*max_angle_error=*/1.0);
   EXPECT_EQ(touched, 0);
   EXPECT_EQ(tracks.at(1).track.Length(), 2u);
 }
@@ -115,8 +117,8 @@ TEST(TrackFilter, FilterByAngle_MisalignedRaysDropped) {
 
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
-  const int touched = FilterTracksByAngle(
-      view_graph, rec, tracks, /*max_angle_error=*/1.0);
+  const int touched =
+      FilterTracksByAngle(view_graph, rec, tracks, /*max_angle_error=*/1.0);
   EXPECT_EQ(touched, 1);
   EXPECT_EQ(tracks.at(1).track.Length(), 0u);
 }
@@ -146,8 +148,8 @@ TEST(TrackFilter, FilterByAngle_UncalibratedCameraDoubleThreshold) {
 
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
-  const int touched = FilterTracksByAngle(
-      view_graph, rec, tracks, /*max_angle_error=*/3.0);
+  const int touched =
+      FilterTracksByAngle(view_graph, rec, tracks, /*max_angle_error=*/3.0);
   EXPECT_EQ(touched, 0);
   EXPECT_EQ(tracks.at(1).track.Length(), 2u);
 
@@ -189,8 +191,8 @@ TEST(TrackFilter, FilterByAngle_PointBehindCameraSkipped) {
 
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
-  const int touched = FilterTracksByAngle(
-      view_graph, rec, tracks, /*max_angle_error=*/1.0);
+  const int touched =
+      FilterTracksByAngle(view_graph, rec, tracks, /*max_angle_error=*/1.0);
   EXPECT_EQ(touched, 1);
   // Only image 1's observation survived.
   ASSERT_EQ(tracks.at(1).track.Length(), 1u);
@@ -199,8 +201,8 @@ TEST(TrackFilter, FilterByAngle_PointBehindCameraSkipped) {
 
 // === FilterTrackTriangulationAngle tests ===
 
-// Build a rec with no camera (FilterTrackTriangulationAngle doesn't use cameras)
-// just images.
+// Build a rec with no camera (FilterTrackTriangulationAngle doesn't use
+// cameras) just images.
 Reconstruction MakeRecImagesOnly(
     const std::vector<std::pair<image_t, Rigid3d>>& img_specs) {
   Reconstruction rec;
@@ -222,14 +224,13 @@ TEST(TrackFilter, FilterTriAngle_ParallelRaysDropped) {
   std::unordered_map<point3D_t, Point3D> tracks;
 
   // Two cameras both at origin, identity orientation => same projection center.
-  Reconstruction rec =
-      MakeRecImagesOnly({{1, Rigid3d()}, {2, Rigid3d()}});
+  Reconstruction rec = MakeRecImagesOnly({{1, Rigid3d()}, {2, Rigid3d()}});
 
   Eigen::Vector3d xyz(0.0, 0.0, 5.0);
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
-  const int touched = FilterTrackTriangulationAngle(
-      view_graph, rec, tracks, /*min_angle=*/1.0);
+  const int touched =
+      FilterTrackTriangulationAngle(view_graph, rec, tracks, /*min_angle=*/1.0);
   EXPECT_EQ(touched, 1);
   EXPECT_EQ(tracks.at(1).track.Length(), 0u);
 }
@@ -250,8 +251,8 @@ TEST(TrackFilter, FilterTriAngle_PerpendicularRaysKept) {
   Eigen::Vector3d xyz(0.0, 0.0, 5.0);
   tracks.emplace(1, MakePoint3D(xyz, {{1, 0}, {2, 0}}));
 
-  const int touched = FilterTrackTriangulationAngle(
-      view_graph, rec, tracks, /*min_angle=*/1.0);
+  const int touched =
+      FilterTrackTriangulationAngle(view_graph, rec, tracks, /*min_angle=*/1.0);
   EXPECT_EQ(touched, 0);
   EXPECT_EQ(tracks.at(1).track.Length(), 2u);
 }

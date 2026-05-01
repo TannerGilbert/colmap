@@ -36,7 +36,6 @@ using PoseGraphEdgeMap =
     std::unordered_map<colmap::image_pair_t, colmap::PoseGraph::Edge>;
 PYBIND11_MAKE_OPAQUE(PoseGraphEdgeMap);
 
-using ImagePairMap =
-    std::unordered_map<colmap::image_pair_t,
-                       colmap::CorrespondenceGraph::ImagePair>;
+using ImagePairMap = std::unordered_map<colmap::image_pair_t,
+                                        colmap::CorrespondenceGraph::ImagePair>;
 PYBIND11_MAKE_OPAQUE(ImagePairMap);

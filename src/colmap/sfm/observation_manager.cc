@@ -442,8 +442,7 @@ size_t ObservationManager::FilterPoints3DWithSmallTriangulationAngle(
 
 std::vector<point3D_t>
 ObservationManager::FindPoints3DWithSmallTriangulationAngle(
-    const double min_tri_angle,
-    const std::vector<point3D_t>& point3D_ids) {
+    const double min_tri_angle, const std::vector<point3D_t>& point3D_ids) {
   std::vector<point3D_t> result;
   const double min_tri_angle_rad = DegToRad(min_tri_angle);
   std::unordered_map<image_t, Eigen::Vector3d> proj_centers;

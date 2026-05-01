@@ -346,41 +346,46 @@ void BindBundleAdjuster(py::module& m) {
            "config"_a)
       .def_property_readonly("problem", &CeresBundleAdjuster::Problem);
 
-  m.def("create_default_bundle_adjuster",
-        [](const BundleAdjustmentOptions& options,
-           const BundleAdjustmentConfig& config,
-           Reconstruction& reconstruction)
-            -> std::shared_ptr<CeresBundleAdjuster> {
-          auto ba = CreateDefaultBundleAdjuster(options, config, reconstruction);
-          auto* ceres_ba = dynamic_cast<CeresBundleAdjuster*>(ba.get());
-          if (!ceres_ba) {
-            throw std::runtime_error(
-                "CreateDefaultBundleAdjuster did not return a CeresBundleAdjuster");
-          }
-          ba.release();
-          return std::shared_ptr<CeresBundleAdjuster>(ceres_ba);
-        },
-        "options"_a,
-        "config"_a,
-        "reconstruction"_a);
+  m.def(
+      "create_default_bundle_adjuster",
+      [](const BundleAdjustmentOptions& options,
+         const BundleAdjustmentConfig& config,
+         Reconstruction& reconstruction)
+          -> std::shared_ptr<CeresBundleAdjuster> {
+        auto ba = CreateDefaultBundleAdjuster(options, config, reconstruction);
+        auto* ceres_ba = dynamic_cast<CeresBundleAdjuster*>(ba.get());
+        if (!ceres_ba) {
+          throw std::runtime_error(
+              "CreateDefaultBundleAdjuster did not return a "
+              "CeresBundleAdjuster");
+        }
+        ba.release();
+        return std::shared_ptr<CeresBundleAdjuster>(ceres_ba);
+      },
+      "options"_a,
+      "config"_a,
+      "reconstruction"_a);
 
-  m.def("create_default_ceres_bundle_adjuster",
-        [](const BundleAdjustmentOptions& options,
-           const BundleAdjustmentConfig& config,
-           Reconstruction& reconstruction)
-            -> std::shared_ptr<CeresBundleAdjuster> {
-          auto ba = CreateDefaultCeresBundleAdjuster(options, config, reconstruction);
-          auto* ceres_ba = dynamic_cast<CeresBundleAdjuster*>(ba.get());
-          if (!ceres_ba) {
-            throw std::runtime_error(
-                "CreateDefaultCeresBundleAdjuster did not return a CeresBundleAdjuster");
-          }
-          ba.release();
-          return std::shared_ptr<CeresBundleAdjuster>(ceres_ba);
-        },
-        "options"_a,
-        "config"_a,
-        "reconstruction"_a);
+  m.def(
+      "create_default_ceres_bundle_adjuster",
+      [](const BundleAdjustmentOptions& options,
+         const BundleAdjustmentConfig& config,
+         Reconstruction& reconstruction)
+          -> std::shared_ptr<CeresBundleAdjuster> {
+        auto ba =
+            CreateDefaultCeresBundleAdjuster(options, config, reconstruction);
+        auto* ceres_ba = dynamic_cast<CeresBundleAdjuster*>(ba.get());
+        if (!ceres_ba) {
+          throw std::runtime_error(
+              "CreateDefaultCeresBundleAdjuster did not return a "
+              "CeresBundleAdjuster");
+        }
+        ba.release();
+        return std::shared_ptr<CeresBundleAdjuster>(ceres_ba);
+      },
+      "options"_a,
+      "config"_a,
+      "reconstruction"_a);
 
   m.def("create_pose_prior_bundle_adjuster",
         CreatePosePriorBundleAdjuster,
@@ -398,48 +403,48 @@ void BindBundleAdjuster(py::module& m) {
         "pose_priors"_a,
         "reconstruction"_a);
 
-  m.def("create_depth_bundle_adjuster",
-        [](ceres::Problem* problem,
-           image_t image_id,
-           const std::vector<point3D_t>& point3D_ids,
-           const std::vector<double>& depths,
-           const std::vector<double>& loss_magnitudes,
-           const std::vector<double>& loss_params,
-           const std::vector<CeresBundleAdjustmentOptions::LossFunctionType>&
-               loss_types,
-           py::array_t<double> shift_scale,
-           Reconstruction& reconstruction,
-           bool logloss,
-           bool fix_shift,
-           bool fix_scale) {
-          auto buf = shift_scale.request();
-          if (buf.ndim != 1 || buf.shape[0] != 2)
-            throw std::runtime_error(
-                "shift_scale must have exactly 2 elements.");
-          double* shift_scale_ptr = static_cast<double*>(buf.ptr);
-          DepthPriorBundleAdjuster(problem,
-                                   image_id,
-                                   point3D_ids,
-                                   depths,
-                                   loss_magnitudes,
-                                   loss_params,
-                                   loss_types,
-                                   shift_scale_ptr,
-                                   reconstruction,
-                                   logloss,
-                                   fix_shift,
-                                   fix_scale);
-        },
-        "problem"_a,
-        "image_id"_a,
-        "point3D_ids"_a,
-        "depths"_a,
-        "loss_magnitudes"_a,
-        "loss_params"_a,
-        "loss_types"_a,
-        "shift_scale"_a,
-        "reconstruction"_a,
-        "logloss"_a = false,
-        "fix_shift"_a = false,
-        "fix_scale"_a = false);
+  m.def(
+      "create_depth_bundle_adjuster",
+      [](ceres::Problem* problem,
+         image_t image_id,
+         const std::vector<point3D_t>& point3D_ids,
+         const std::vector<double>& depths,
+         const std::vector<double>& loss_magnitudes,
+         const std::vector<double>& loss_params,
+         const std::vector<CeresBundleAdjustmentOptions::LossFunctionType>&
+             loss_types,
+         py::array_t<double> shift_scale,
+         Reconstruction& reconstruction,
+         bool logloss,
+         bool fix_shift,
+         bool fix_scale) {
+        auto buf = shift_scale.request();
+        if (buf.ndim != 1 || buf.shape[0] != 2)
+          throw std::runtime_error("shift_scale must have exactly 2 elements.");
+        double* shift_scale_ptr = static_cast<double*>(buf.ptr);
+        DepthPriorBundleAdjuster(problem,
+                                 image_id,
+                                 point3D_ids,
+                                 depths,
+                                 loss_magnitudes,
+                                 loss_params,
+                                 loss_types,
+                                 shift_scale_ptr,
+                                 reconstruction,
+                                 logloss,
+                                 fix_shift,
+                                 fix_scale);
+      },
+      "problem"_a,
+      "image_id"_a,
+      "point3D_ids"_a,
+      "depths"_a,
+      "loss_magnitudes"_a,
+      "loss_params"_a,
+      "loss_types"_a,
+      "shift_scale"_a,
+      "reconstruction"_a,
+      "logloss"_a = false,
+      "fix_shift"_a = false,
+      "fix_scale"_a = false);
 }

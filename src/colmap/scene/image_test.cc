@@ -384,8 +384,7 @@ TEST(Image, Point3DIdsEmpty) {
 
 TEST(Image, Point2DCoords) {
   Image image;
-  std::vector<Eigen::Vector2d> pts = {
-      {1.5, 2.5}, {3.0, 4.0}, {5.5, 6.5}};
+  std::vector<Eigen::Vector2d> pts = {{1.5, 2.5}, {3.0, 4.0}, {5.5, 6.5}};
   image.SetPoints2D(pts);
 
   Eigen::MatrixXd coords = image.Point2DCoords();

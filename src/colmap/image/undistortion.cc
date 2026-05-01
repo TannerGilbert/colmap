@@ -417,11 +417,9 @@ void UndistortImageFeatures(Reconstruction& rec, bool clean_points) {
       for (size_t i = 0; i < n; i++) {
         const std::optional<Eigen::Vector2d> cam_pt =
             camera.CamFromImg(image.features[i]);
-        THROW_CHECK(cam_pt.has_value())
-            << "CamFromImg failed for feature " << i << " of image "
-            << image.ImageId();
-        image.features_undist.emplace_back(
-            cam_pt->homogeneous().normalized());
+        THROW_CHECK(cam_pt.has_value()) << "CamFromImg failed for feature " << i
+                                        << " of image " << image.ImageId();
+        image.features_undist.emplace_back(cam_pt->homogeneous().normalized());
       }
     });
   }

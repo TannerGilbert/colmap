@@ -23,9 +23,8 @@ TEST(ScaledDepthErrorCostFunctor, ZeroResidualAtIdentity) {
   Eigen::Vector2d shift_scale(0, 0);
 
   double residual = std::numeric_limits<double>::quiet_NaN();
-  const double* parameters[3] = {cam_from_world.params.data(),
-                                 point3D.data(),
-                                 shift_scale.data()};
+  const double* parameters[3] = {
+      cam_from_world.params.data(), point3D.data(), shift_scale.data()};
   EXPECT_TRUE(cost_function->Evaluate(parameters, &residual, nullptr));
   EXPECT_NEAR(residual, 0.0, 1e-10);
 }
@@ -44,9 +43,8 @@ TEST(ScaledDepthErrorCostFunctor, NonZeroResidualWithShiftScale) {
   double expected = 10.0 - 1.0 - 5.0 * std::exp(0.5);
 
   double residual = std::numeric_limits<double>::quiet_NaN();
-  const double* parameters[3] = {cam_from_world.params.data(),
-                                 point3D.data(),
-                                 shift_scale.data()};
+  const double* parameters[3] = {
+      cam_from_world.params.data(), point3D.data(), shift_scale.data()};
   EXPECT_TRUE(cost_function->Evaluate(parameters, &residual, nullptr));
   EXPECT_NEAR(residual, expected, 1e-10);
 }
@@ -67,9 +65,8 @@ TEST(ScaledDepthErrorConstantPoseCostFunctor, MatchesVariablePose) {
   Eigen::Vector2d shift_scale(0.1, 0.2);
 
   double residual_var = 0, residual_const = 0;
-  const double* params_var[3] = {cam_from_world.params.data(),
-                                 point3D.data(),
-                                 shift_scale.data()};
+  const double* params_var[3] = {
+      cam_from_world.params.data(), point3D.data(), shift_scale.data()};
   const double* params_const[2] = {point3D.data(), shift_scale.data()};
 
   EXPECT_TRUE(variable->Evaluate(params_var, &residual_var, nullptr));
@@ -87,9 +84,8 @@ TEST(LogScaledDepthErrorCostFunctor, ZeroResidualAtIdentity) {
   Eigen::Vector2d shift_scale(0, 0);
 
   double residual = std::numeric_limits<double>::quiet_NaN();
-  const double* parameters[3] = {cam_from_world.params.data(),
-                                 point3D.data(),
-                                 shift_scale.data()};
+  const double* parameters[3] = {
+      cam_from_world.params.data(), point3D.data(), shift_scale.data()};
   EXPECT_TRUE(cost_function->Evaluate(parameters, &residual, nullptr));
   EXPECT_NEAR(residual, 0.0, 1e-10);
 }

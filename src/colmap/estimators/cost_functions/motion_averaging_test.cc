@@ -228,8 +228,7 @@ TEST(CovarianceWeightedBATAPairwiseDirection, MatchesPerAxisWhitened) {
         sigma_x * sigma_x, sigma_y * sigma_y, sigma_z * sigma_z);
 
     // cov_world = R^T diag(sigma^2) R (the encoding the call site uses).
-    const Eigen::Matrix3d cov_world =
-        R.transpose() * sigma2.asDiagonal() * R;
+    const Eigen::Matrix3d cov_world = R.transpose() * sigma2.asDiagonal() * R;
 
     // Random parameters.
     Eigen::Vector3d c1(uni(rng), uni(rng), uni(rng));
@@ -238,14 +237,13 @@ TEST(CovarianceWeightedBATAPairwiseDirection, MatchesPerAxisWhitened) {
 
     // Evaluate native CWCF<BATA>(cov_world, t_obs).
     std::unique_ptr<ceres::CostFunction> cost_function(
-        CovarianceWeightedCostFunctor<
-            BATAPairwiseDirectionCostFunctor>::Create(cov_world, t_obs));
+        CovarianceWeightedCostFunctor<BATAPairwiseDirectionCostFunctor>::Create(
+            cov_world, t_obs));
     ASSERT_NE(cost_function, nullptr);
 
-    Eigen::Vector3d residuals(
-        std::numeric_limits<double>::quiet_NaN(),
-        std::numeric_limits<double>::quiet_NaN(),
-        std::numeric_limits<double>::quiet_NaN());
+    Eigen::Vector3d residuals(std::numeric_limits<double>::quiet_NaN(),
+                              std::numeric_limits<double>::quiet_NaN(),
+                              std::numeric_limits<double>::quiet_NaN());
     const double* parameters[3] = {c1.data(), c2.data(), &scale};
     EXPECT_TRUE(cost_function->Evaluate(parameters, residuals.data(), nullptr));
     const double native_sqnorm = residuals.squaredNorm();
@@ -277,8 +275,8 @@ TEST(CovarianceWeightedBATAPairwiseDirection, IdentityRotationIsotropicSigma) {
       (sigma * sigma) * Eigen::Matrix3d::Identity();
 
   std::unique_ptr<ceres::CostFunction> weighted(
-      CovarianceWeightedCostFunctor<
-          BATAPairwiseDirectionCostFunctor>::Create(cov_world, t_obs));
+      CovarianceWeightedCostFunctor<BATAPairwiseDirectionCostFunctor>::Create(
+          cov_world, t_obs));
   std::unique_ptr<ceres::CostFunction> plain(
       BATAPairwiseDirectionCostFunctor::Create(t_obs));
 
@@ -300,18 +298,15 @@ TEST(CovarianceWeightedBATAPairwiseDirection, ZeroResidualWhenAligned) {
   const Eigen::Vector3d t_obs = scale * (c2 - c1);
 
   // Arbitrary non-isotropic, non-axis-aligned covariance.
-  const Eigen::Quaterniond q =
-      Eigen::Quaterniond(Eigen::AngleAxisd(0.6,
-                                           Eigen::Vector3d(1, 2, 3)
-                                               .normalized()));
+  const Eigen::Quaterniond q = Eigen::Quaterniond(
+      Eigen::AngleAxisd(0.6, Eigen::Vector3d(1, 2, 3).normalized()));
   const Eigen::Matrix3d R = q.toRotationMatrix();
   const Eigen::Vector3d sigma2(0.04, 0.25, 0.09);
-  const Eigen::Matrix3d cov_world =
-      R.transpose() * sigma2.asDiagonal() * R;
+  const Eigen::Matrix3d cov_world = R.transpose() * sigma2.asDiagonal() * R;
 
   std::unique_ptr<ceres::CostFunction> cost_function(
-      CovarianceWeightedCostFunctor<
-          BATAPairwiseDirectionCostFunctor>::Create(cov_world, t_obs));
+      CovarianceWeightedCostFunctor<BATAPairwiseDirectionCostFunctor>::Create(
+          cov_world, t_obs));
 
   Eigen::Vector3d residuals;
   const double* parameters[3] = {c1.data(), c2.data(), &scale};

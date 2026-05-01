@@ -118,7 +118,8 @@ void RectifyAndUndistortStereoImages(const UndistortCameraOptions& options,
                                      Camera* undistorted_camera,
                                      Eigen::Matrix4d* Q);
 
-// FORK-REMOVAL TODO: only exists for ImagePairsInlierCount / FilterTracksByAngle.
+// FORK-REMOVAL TODO: only exists for ImagePairsInlierCount /
+// FilterTracksByAngle.
 //
 // Populate Image::features_undist with normalized bearing rays from
 // Image::features. Parallelized via ThreadPool. If clean_points is false,

@@ -434,8 +434,8 @@ TEST(CovarianceBA, RunsWithoutCrash) {
 
   // Set identity Cholesky on all images (equivalent to unweighted)
   for (const auto& [img_id, img] : reconstruction.Images()) {
-    std::vector<Eigen::Vector3d> chol(
-        img.NumPoints2D(), Eigen::Vector3d(1.0, 0.0, 1.0));
+    std::vector<Eigen::Vector3d> chol(img.NumPoints2D(),
+                                      Eigen::Vector3d(1.0, 0.0, 1.0));
     reconstruction.Image(img_id).SetPixelCholeskyXY(chol);
   }
 
@@ -467,8 +467,8 @@ TEST(CovarianceBA, IgnoredWhenDisabled) {
 
   // Set non-identity Cholesky that would change results
   for (const auto& [img_id, img] : reconstruction.Images()) {
-    std::vector<Eigen::Vector3d> chol(
-        img.NumPoints2D(), Eigen::Vector3d(2.0, 0.5, 3.0));
+    std::vector<Eigen::Vector3d> chol(img.NumPoints2D(),
+                                      Eigen::Vector3d(2.0, 0.5, 3.0));
     reconstruction.Image(img_id).SetPixelCholeskyXY(chol);
   }
 

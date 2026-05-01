@@ -41,11 +41,11 @@ Image::Image()
       num_points3D_(0) {}
 
 Image::Image(const Image& other)
-    : features(other.features),
-      features_undist(other.features_undist),
-      angular_stddevs(other.angular_stddevs),
-      is_inlier(other.is_inlier),
+    : is_inlier(other.is_inlier),
       is_track_anchor(other.is_track_anchor),
+      angular_stddevs(other.angular_stddevs),
+      features(other.features),
+      features_undist(other.features_undist),
       name_(other.Name()),
       camera_ptr_(other.HasCameraPtr() ? other.CameraPtr() : nullptr),
       frame_ptr_(other.HasFramePtr() ? other.FramePtr() : nullptr),

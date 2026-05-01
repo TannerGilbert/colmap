@@ -733,8 +733,7 @@ TriAngleTestData MakeTriAngleTestReconstruction() {
   d.reconstruction.RegisterFrame(1);
   d.reconstruction.RegisterFrame(2);
 
-  d.obs_manager =
-      std::make_unique<ObservationManager>(d.reconstruction);
+  d.obs_manager = std::make_unique<ObservationManager>(d.reconstruction);
 
   // Narrow angle: point far away -> tiny angle
   Track narrow_track;
