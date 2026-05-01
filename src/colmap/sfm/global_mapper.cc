@@ -129,12 +129,11 @@ void GlobalMapper::EstablishTracks(const GlobalMapperOptions& options) {
   to.intra_image_consistency_threshold =
       options.track_intra_image_consistency_threshold;
   to.min_num_views_per_track = options.track_min_num_views_per_track;
-  // When the LC second pass is enabled, the helper-side greedy
-  // subsample is bypassed so SubsampleTracksForProblem can run with the
-  // full candidate set including LC observations.
-  to.required_tracks_per_view =
-      options.track_lc_second_pass ? std::numeric_limits<int>::max()
-                                   : options.track_required_tracks_per_view;
+  // LC second pass appends observations after the union-find pass, so it needs
+  // the full candidate set. Without LC, preserve native per-view limiting.
+  to.required_tracks_per_view = options.track_lc_second_pass
+                                    ? std::numeric_limits<int>::max()
+                                    : options.track_required_tracks_per_view;
 
   std::vector<image_pair_t> valid_pair_ids;
   valid_pair_ids.reserve(pose_graph_->NumEdges());
@@ -147,60 +146,21 @@ void GlobalMapper::EstablishTracks(const GlobalMapperOptions& options) {
     ignore_match = MakeLoopClosureMatchPredicate(
         valid_pair_ids, *database_cache_->CorrespondenceGraph());
   }
-
-  auto selected = EstablishTracksFromCorrGraph(
-      valid_pair_ids,
-      *database_cache_->CorrespondenceGraph(),
-      image_id_to_keypoints,
-      to,
-      ignore_match);
+  auto selected =
+      EstablishTracksFromCorrGraph(valid_pair_ids,
+                                   *database_cache_->CorrespondenceGraph(),
+                                   image_id_to_keypoints,
+                                   to,
+                                   ignore_match);
   if (options.track_lc_second_pass) {
     AppendLoopClosureObservations(
-        valid_pair_ids,
-        *database_cache_->CorrespondenceGraph(),
-        selected);
+        valid_pair_ids, *database_cache_->CorrespondenceGraph(), selected);
   }
   for (auto& [point3D_id, point3D] : selected) {
     reconstruction_->AddPoint3D(point3D_id, std::move(point3D));
   }
   LOG(INFO) << "Track establishment: " << reconstruction_->NumPoints3D()
             << " tracks added to reconstruction";
-}
-
-void GlobalMapper::SubsampleTracksForProblem(
-    const GlobalMapperOptions& options) {
-  TrackSubsampleOptions opts;
-  opts.min_num_views_per_track = options.track_min_num_views_per_track;
-  opts.max_num_views_per_track = options.track_max_num_views_per_track;
-  opts.required_tracks_per_view = options.track_required_tracks_per_view;
-  opts.max_num_tracks = options.track_max_num_tracks;
-
-  // Extract registered image set from the reconstruction.
-  std::unordered_set<image_t> registered_image_ids;
-  for (const image_t image_id : reconstruction_->RegImageIds()) {
-    registered_image_ids.insert(image_id);
-  }
-
-  auto selected = SubsampleTracks(opts,
-                                   registered_image_ids,
-                                   reconstruction_->Points3D());
-
-  // Sync back: drop everything not in the selected dict, replace tracks
-  // present in selected so post-restriction Track elements are written.
-  std::vector<point3D_t> to_delete;
-  for (const auto& [pid, _] : reconstruction_->Points3D()) {
-    if (selected.count(pid) == 0) {
-      to_delete.push_back(pid);
-    }
-  }
-  for (const point3D_t pid : to_delete) {
-    reconstruction_->DeletePoint3D(pid);
-  }
-  for (auto& [pid, p3d] : selected) {
-    if (reconstruction_->ExistsPoint3D(pid)) {
-      reconstruction_->Point3D(pid).track = std::move(p3d.track);
-    }
-  }
 }
 
 bool GlobalMapper::GlobalPositioning(const GlobalPositionerOptions& options,

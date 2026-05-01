@@ -66,14 +66,7 @@ struct GlobalMapperOptions {
   int track_required_tracks_per_view = std::numeric_limits<int>::max();
   // Minimum number of views per track.
   int track_min_num_views_per_track = 3;
-  // Upper bound on track length (regular Track::Length() only; LC
-  // observations not counted). Tracks above this are dropped during
-  // SubsampleTracksForProblem.
-  int track_max_num_views_per_track = std::numeric_limits<int>::max();
-  // Hard cap on the number of tracks kept after subsampling.
-  int track_max_num_tracks = std::numeric_limits<int>::max();
-  // Append LC observations to tracks after establishment. Bypasses
-  // helper-side subsample; call SubsampleTracksForProblem after.
+  // Append LC observations to tracks after establishment.
   bool track_lc_second_pass = false;
 
   // Thresholds for each component.
@@ -121,9 +114,6 @@ class GlobalMapper {
 
   // Establish tracks from feature matches.
   void EstablishTracks(const GlobalMapperOptions& options);
-
-  // Greedy length-sorted subsample with optional 2-view depth gate.
-  void SubsampleTracksForProblem(const GlobalMapperOptions& options);
 
   // Estimate global camera positions.
   bool GlobalPositioning(const GlobalPositionerOptions& options,

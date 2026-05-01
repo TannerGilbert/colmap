@@ -31,7 +31,8 @@ struct TrackEstablishmentOptions {
 
 // Predicate called for each match (image_id1, point2D_idx1, image_id2,
 // point2D_idx2). Returns true to skip (ignore) the match.
-using MatchPredicate = std::function<bool(image_t, point2D_t, image_t, point2D_t)>;
+using MatchPredicate =
+    std::function<bool(image_t, point2D_t, image_t, point2D_t)>;
 
 // Returns a MatchPredicate that ignores exact LC-flagged inlier matches
 // (are_lc==true) in the correspondence graph. This excludes LC pairwise
@@ -61,16 +62,15 @@ void AppendLoopClosureObservations(
     const CorrespondenceGraph& corr_graph,
     std::unordered_map<point3D_t, Point3D>& tracks);
 
-struct TrackSubsampleOptions {
+struct TrackProblemFilterOptions {
   int min_num_views_per_track = 3;
   int max_num_views_per_track = std::numeric_limits<int>::max();
-  int required_tracks_per_view = std::numeric_limits<int>::max();
-  int max_num_tracks = std::numeric_limits<int>::max();
 };
 
-// Greedy length-sorted subsample with per-image quota. Returns selected tracks.
-std::unordered_map<point3D_t, Point3D> SubsampleTracks(
-    const TrackSubsampleOptions& options,
+// Filter tracks for the optimization problem. LC observations may augment an
+// admitted regular track, but do not satisfy the regular-view admission gate.
+std::unordered_map<point3D_t, Point3D> FilterTracksForProblem(
+    const TrackProblemFilterOptions& options,
     const std::unordered_set<image_t>& registered_image_ids,
     const std::unordered_map<point3D_t, Point3D>& tracks_full);
 

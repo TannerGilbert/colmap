@@ -715,6 +715,8 @@ void OptionManager::AddGlobalMapperOptions() {
                    &global_mapper->mapper.track_required_tracks_per_view);
   AddDefaultOption("GlobalMapper.track_min_num_views_per_track",
                    &global_mapper->mapper.track_min_num_views_per_track);
+  AddDefaultOption("GlobalMapper.track_lc_second_pass",
+                   &global_mapper->mapper.track_lc_second_pass);
 
   // Global positioning options.
   AddDefaultOption("GlobalMapper.gp_use_gpu",
@@ -728,9 +730,8 @@ void OptionManager::AddGlobalMapperOptions() {
                    &global_mapper->mapper.global_positioning.optimize_points);
   AddDefaultOption("GlobalMapper.gp_optimize_scales",
                    &global_mapper->mapper.global_positioning.optimize_scales);
-  AddDefaultOption(
-      "GlobalMapper.gp_loss_function_scale",
-      &global_mapper->mapper.global_positioning.loss.scale);
+  AddDefaultOption("GlobalMapper.gp_loss_function_scale",
+                   &global_mapper->mapper.global_positioning.loss.scale);
   AddDefaultOption("GlobalMapper.gp_max_num_iterations",
                    &global_mapper->mapper.global_positioning.solver_options
                         .max_num_iterations);
@@ -760,9 +761,8 @@ void OptionManager::AddGlobalMapperOptions() {
                    &global_mapper->mapper.bundle_adjustment.ceres->use_gpu);
   AddDefaultOption("GlobalMapper.ba_ceres_gpu_index",
                    &global_mapper->mapper.bundle_adjustment.ceres->gpu_index);
-  AddDefaultOption(
-      "GlobalMapper.ba_ceres_loss_function_scale",
-      &global_mapper->mapper.bundle_adjustment.ceres->loss.scale);
+  AddDefaultOption("GlobalMapper.ba_ceres_loss_function_scale",
+                   &global_mapper->mapper.bundle_adjustment.ceres->loss.scale);
   AddDefaultOption("GlobalMapper.ba_ceres_max_num_iterations",
                    &global_mapper->mapper.bundle_adjustment.ceres
                         ->solver_options.max_num_iterations);

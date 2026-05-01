@@ -2,9 +2,9 @@
 
 #include "colmap/feature/types.h"
 #include "colmap/scene/correspondence_graph.h"
-#include "colmap/scene/two_view_geometry.h"
 #include "colmap/scene/image.h"
 #include "colmap/scene/point3d.h"
+#include "colmap/scene/two_view_geometry.h"
 #include "colmap/util/types.h"
 
 #include <algorithm>
@@ -142,14 +142,20 @@ TEST(TrackEstablishment, IntraImageConsistencyDropsInconsistentTrack) {
   // Keypoints: image 1 has feature 0 and feature 1 placed FAR apart so the
   // intra-image consistency check rejects the merged track.
   std::unordered_map<image_t, std::vector<Eigen::Vector2d>> keypoints;
-  keypoints[1] = {Eigen::Vector2d(0, 0), Eigen::Vector2d(1000, 1000),
-                  Eigen::Vector2d(200, 200), Eigen::Vector2d(300, 300),
+  keypoints[1] = {Eigen::Vector2d(0, 0),
+                  Eigen::Vector2d(1000, 1000),
+                  Eigen::Vector2d(200, 200),
+                  Eigen::Vector2d(300, 300),
                   Eigen::Vector2d(400, 400)};
-  keypoints[2] = {Eigen::Vector2d(0, 0), Eigen::Vector2d(100, 100),
-                  Eigen::Vector2d(200, 200), Eigen::Vector2d(300, 300),
+  keypoints[2] = {Eigen::Vector2d(0, 0),
+                  Eigen::Vector2d(100, 100),
+                  Eigen::Vector2d(200, 200),
+                  Eigen::Vector2d(300, 300),
                   Eigen::Vector2d(400, 400)};
-  keypoints[3] = {Eigen::Vector2d(0, 0), Eigen::Vector2d(100, 100),
-                  Eigen::Vector2d(200, 200), Eigen::Vector2d(300, 300),
+  keypoints[3] = {Eigen::Vector2d(0, 0),
+                  Eigen::Vector2d(100, 100),
+                  Eigen::Vector2d(200, 200),
+                  Eigen::Vector2d(300, 300),
                   Eigen::Vector2d(400, 400)};
 
   TrackEstablishmentOptions options;
@@ -206,10 +212,10 @@ std::unordered_set<image_t> MakeImageIds(
 }
 
 // LengthFilter: with ``min_num_views_per_track=10`` every track here is too
-// short, so SubsampleTracks returns empty. Loosening to 2 surfaces every input
-// track (assuming the per-view greedy quota is satisfied).
+// short, so FilterTracksForProblem returns empty. Loosening to 2 surfaces every
+// input track.
 //
-// Drives SubsampleTracks.
+// Drives FilterTracksForProblem.
 TEST(FindTracksForProblem, LengthFilter) {
   std::unordered_map<image_t, Image> images;
   images.emplace(1, MakeImage(1, 5));
@@ -218,37 +224,53 @@ TEST(FindTracksForProblem, LengthFilter) {
 
   std::unordered_map<point3D_t, Point3D> tracks_full;
   for (point2D_t f = 0; f < 5; ++f) {
-    tracks_full.emplace(f,
-                        MakePoint3DFromElements({{1, f}, {2, f}, {3, f}}));
+    tracks_full.emplace(f, MakePoint3DFromElements({{1, f}, {2, f}, {3, f}}));
   }
 
   const auto reg_ids = MakeImageIds(images);
 
   // High-min variant: tracks have length 3, demand 10.
   {
-    TrackSubsampleOptions options;
+    TrackProblemFilterOptions options;
     options.min_num_views_per_track = 10;
-    options.required_tracks_per_view = 1000;  // never saturate
-    const auto selected = SubsampleTracks(
-        options, reg_ids, tracks_full);
+    const auto selected = FilterTracksForProblem(options, reg_ids, tracks_full);
     EXPECT_EQ(selected.size(), 0u);
     EXPECT_TRUE(selected.empty());
   }
 
   // Low-min variant: every length-3 track survives.
   {
-    TrackSubsampleOptions options;
+    TrackProblemFilterOptions options;
     options.min_num_views_per_track = 2;
-    options.required_tracks_per_view = 1000;
-    const auto selected = SubsampleTracks(
-        options, reg_ids, tracks_full);
+    const auto selected = FilterTracksForProblem(options, reg_ids, tracks_full);
     EXPECT_EQ(selected.size(), 5u);
   }
 }
 
+TEST(FindTracksForProblem, LcOnlyTrackDoesNotSatisfyMinViews) {
+  std::unordered_map<image_t, Image> images;
+  images.emplace(1, MakeImage(1, 5));
+  images.emplace(2, MakeImage(2, 5));
+
+  Point3D point3D;
+  point3D.track.AddElement(1, 0);
+  point3D.track.lc_elements.emplace_back(2, 0);
+
+  std::unordered_map<point3D_t, Point3D> tracks_full;
+  tracks_full.emplace(0, std::move(point3D));
+
+  const auto reg_ids = MakeImageIds(images);
+
+  TrackProblemFilterOptions options;
+  options.min_num_views_per_track = 2;
+  const auto selected = FilterTracksForProblem(options, reg_ids, tracks_full);
+
+  EXPECT_TRUE(selected.empty());
+}
+
 // MaxLengthFilter: tracks of length 5 dropped when max=4.
 //
-// Drives SubsampleTracks.
+// Drives FilterTracksForProblem.
 TEST(FindTracksForProblem, MaxLengthFilter) {
   std::unordered_map<image_t, Image> images;
   for (image_t i = 1; i <= 5; ++i) {
@@ -258,77 +280,17 @@ TEST(FindTracksForProblem, MaxLengthFilter) {
   std::unordered_map<point3D_t, Point3D> tracks_full;
   for (point2D_t f = 0; f < 3; ++f) {
     tracks_full.emplace(
-        f, MakePoint3DFromElements(
-               {{1, f}, {2, f}, {3, f}, {4, f}, {5, f}}));
+        f, MakePoint3DFromElements({{1, f}, {2, f}, {3, f}, {4, f}, {5, f}}));
   }
 
   const auto reg_ids = MakeImageIds(images);
 
-  TrackSubsampleOptions options;
+  TrackProblemFilterOptions options;
   options.min_num_views_per_track = 2;
   options.max_num_views_per_track = 4;
-  options.required_tracks_per_view = 1000;
-  const auto selected = SubsampleTracks(
-      options, reg_ids, tracks_full);
+  const auto selected = FilterTracksForProblem(options, reg_ids, tracks_full);
   EXPECT_EQ(selected.size(), 0u);
   EXPECT_TRUE(selected.empty());
-}
-
-// GreedyQuota: 5 length-3 tracks across 3 images, ``required_tracks_per_view=2``
-// per-view quota. Greedy keeps as soon as every image is satisfied -> 2
-// tracks suffice (each contributes to all 3 images at once).
-//
-// Drives SubsampleTracks.
-TEST(FindTracksForProblem, GreedyQuota) {
-  std::unordered_map<image_t, Image> images;
-  for (image_t i = 1; i <= 3; ++i) {
-    images.emplace(i, MakeImage(i, 5));
-  }
-
-  std::unordered_map<point3D_t, Point3D> tracks_full;
-  for (point2D_t f = 0; f < 5; ++f) {
-    tracks_full.emplace(f,
-                        MakePoint3DFromElements({{1, f}, {2, f}, {3, f}}));
-  }
-
-  const auto reg_ids = MakeImageIds(images);
-
-  TrackSubsampleOptions options;
-  options.min_num_views_per_track = 2;
-  options.required_tracks_per_view = 2;
-  const auto selected = SubsampleTracks(
-      options, reg_ids, tracks_full);
-  const size_t n_selected = selected.size();
-
-  // Each track touches all 3 images so 2 tracks fully satisfy the per-view
-  // quota of 2. Bound: at most all 5 input tracks; at least 2 (the quota).
-  EXPECT_GE(n_selected, 2u);
-  EXPECT_LE(n_selected, 5u);
-}
-
-// MinTracksPerViewBugDocumentation: enshrines the actual behaviour of the
-// default ``required_tracks_per_view = INT_MAX``.
-TEST(FindTracksForProblem, MinTracksPerViewBugDocumentation) {
-  std::unordered_map<image_t, Image> images;
-  for (image_t i = 1; i <= 3; ++i) {
-    images.emplace(i, MakeImage(i, 3));
-  }
-
-  std::unordered_map<point3D_t, Point3D> tracks_full;
-  for (point2D_t f = 0; f < 3; ++f) {
-    tracks_full.emplace(f,
-                        MakePoint3DFromElements({{1, f}, {2, f}, {3, f}}));
-  }
-
-  const auto reg_ids = MakeImageIds(images);
-
-  TrackSubsampleOptions options;
-  options.min_num_views_per_track = 2;
-  // options.required_tracks_per_view stays at default = INT_MAX.
-  const auto selected = SubsampleTracks(
-      options, reg_ids, tracks_full);
-  // All 3 tracks are kept — the quota gate is disabled by INT_MAX bar.
-  EXPECT_EQ(selected.size(), 3u);
 }
 
 // ============================================================================
@@ -370,9 +332,7 @@ void AddImagePairWithLC(CorrespondenceGraph& corr_graph,
 }
 
 // Helper: track contains (image_id, p2d_idx) as a regular element.
-bool TrackHasElement(const Track& track,
-                     image_t image_id,
-                     point2D_t p2d_idx) {
+bool TrackHasElement(const Track& track, image_t image_id, point2D_t p2d_idx) {
   for (const auto& el : track.Elements()) {
     if (el.image_id == image_id && el.point2D_idx == p2d_idx) return true;
   }
@@ -572,8 +532,8 @@ TEST(ProcessLoopClosurePairs, MultipleLCMatchesAcrossPairs) {
     tracks.emplace(tid, std::move(p));
   }
 
-  std::vector<image_pair_t> pair_ids = {
-      ImagePairToPairId(4, 5), ImagePairToPairId(5, 6)};
+  std::vector<image_pair_t> pair_ids = {ImagePairToPairId(4, 5),
+                                        ImagePairToPairId(5, 6)};
   AppendLoopClosureObservations(pair_ids, corr_graph, tracks);
 
   // First pair: neither on track → mint 2 (img4:0, img5:0).
@@ -621,8 +581,8 @@ TEST(ProcessLoopClosurePairs, SequentialIdsNoCollision) {
   // Native ids: dense [0, 10). Verify no collision: every track that holds
   // (img4, feat=0) or (img5, feat=0) as a regular element has id >= 10.
   for (const auto& [tid, p3d] : tracks) {
-    const bool minted_endpoint = TrackHasElement(p3d.track, 4, 0) ||
-                                 TrackHasElement(p3d.track, 5, 0);
+    const bool minted_endpoint =
+        TrackHasElement(p3d.track, 4, 0) || TrackHasElement(p3d.track, 5, 0);
     if (minted_endpoint) {
       EXPECT_GE(tid, 10u) << "minted id " << tid << " collided with native";
     }
@@ -655,8 +615,7 @@ TEST(ProcessLoopClosurePairs, NonLcMatchSharingLcEndpointStillBuildsTrack) {
   EXPECT_EQ(tracks.size(), 1u);
   bool found_regular_track = false;
   for (const auto& [tid, p3d] : tracks) {
-    if (TrackHasElement(p3d.track, 1, 0) &&
-        TrackHasElement(p3d.track, 3, 0)) {
+    if (TrackHasElement(p3d.track, 1, 0) && TrackHasElement(p3d.track, 3, 0)) {
       found_regular_track = true;
       EXPECT_TRUE(TrackHasLCElement(p3d.track, 2, 0));
     }
@@ -708,36 +667,6 @@ TEST(ProcessLoopClosurePairs, BothSameTrack) {
   // No new tracks minted, no lc_elements added (same-track skip).
   EXPECT_EQ(tracks.size(), 1u);
   EXPECT_EQ(tracks.at(0).track.lc_elements.size(), 0u);
-}
-
-// ============================================================================
-// SubsampleTracks: max_num_tracks limit
-// ============================================================================
-
-// Verify that ``max_num_tracks`` stops the greedy subsample early.
-TEST(FindTracksForProblem, MaxNumTracksLimit) {
-  std::unordered_map<image_t, Image> images;
-  for (image_t i = 1; i <= 3; ++i) {
-    images.emplace(i, MakeImage(i, 10));
-  }
-
-  std::unordered_map<point3D_t, Point3D> tracks_full;
-  for (point2D_t f = 0; f < 10; ++f) {
-    tracks_full.emplace(f,
-                        MakePoint3DFromElements({{1, f}, {2, f}, {3, f}}));
-  }
-
-  const auto reg_ids = MakeImageIds(images);
-
-  TrackSubsampleOptions options;
-  options.min_num_views_per_track = 2;
-  options.required_tracks_per_view = 1000;
-  options.max_num_tracks = 3;
-  const auto selected = SubsampleTracks(options, reg_ids, tracks_full);
-  // The break fires AFTER inserting when size > max_num_tracks, so we
-  // may get max_num_tracks + 1. The key assertion: not all 10 are kept.
-  EXPECT_LE(static_cast<int>(selected.size()), options.max_num_tracks + 1);
-  EXPECT_LT(selected.size(), tracks_full.size());
 }
 
 }  // namespace

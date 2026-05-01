@@ -1,22 +1,23 @@
 // Binding for EstablishTracksFromCorrGraph, AppendLoopClosureObservations,
-// and SubsampleTracks.
+// and FilterTracksForProblem.
+
+#include "colmap/sfm/track_establishment.h"
 
 #include "colmap/scene/correspondence_graph.h"
 #include "colmap/scene/image.h"
 #include "colmap/scene/point3d.h"
 #include "colmap/scene/track.h"
-#include "colmap/sfm/track_establishment.h"
 #include "colmap/util/types.h"
 
 #include "pycolmap/helpers.h"
 
-#include <pybind11/eigen.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
+
+#include <pybind11/eigen.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 using namespace colmap;
 using namespace pybind11::literals;
@@ -44,8 +45,7 @@ py::dict RunEstablishFullTracks(CorrespondenceGraph& correspondence_graph,
   std::unordered_map<image_t, Image> images;
   images.reserve(images_py.size());
   for (auto item : images_py) {
-    images.emplace(py::cast<image_t>(item.first),
-                   py::cast<Image>(item.second));
+    images.emplace(py::cast<image_t>(item.first), py::cast<Image>(item.second));
   }
 
   std::unordered_map<image_t, std::vector<Eigen::Vector2d>>
@@ -64,8 +64,8 @@ py::dict RunEstablishFullTracks(CorrespondenceGraph& correspondence_graph,
     MatchPredicate ignore_match;
     TrackEstablishmentOptions to = options;
     if (lc_second_pass) {
-      ignore_match = MakeLoopClosureMatchPredicate(
-          valid_pair_ids, correspondence_graph);
+      ignore_match =
+          MakeLoopClosureMatchPredicate(valid_pair_ids, correspondence_graph);
       to.required_tracks_per_view = std::numeric_limits<int>::max();
     }
     tracks = EstablishTracksFromCorrGraph(valid_pair_ids,
@@ -88,7 +88,7 @@ py::dict RunEstablishFullTracks(CorrespondenceGraph& correspondence_graph,
 
 py::dict RunFindTracksForProblem(py::dict images_py,
                                  py::dict tracks_full_py,
-                                 const TrackSubsampleOptions& options) {
+                                 const TrackProblemFilterOptions& options) {
   std::unordered_set<image_t> registered_image_ids;
   for (auto item : images_py) {
     registered_image_ids.insert(py::cast<image_t>(item.first));
@@ -104,7 +104,8 @@ py::dict RunFindTracksForProblem(py::dict images_py,
   std::unordered_map<point3D_t, Point3D> selected;
   {
     py::gil_scoped_release release;
-    selected = SubsampleTracks(options, registered_image_ids, tracks_full);
+    selected =
+        FilterTracksForProblem(options, registered_image_ids, tracks_full);
   }
 
   py::dict tracks_out;
@@ -130,16 +131,12 @@ void BindTrackEstablishment(py::module& m) {
   MakeDataclass(PyEstOpts);
 
   auto PySubOpts =
-      py::classh<TrackSubsampleOptions>(m, "TrackSubsampleOptions")
+      py::classh<TrackProblemFilterOptions>(m, "TrackProblemFilterOptions")
           .def(py::init<>())
           .def_readwrite("min_num_views_per_track",
-                         &TrackSubsampleOptions::min_num_views_per_track)
+                         &TrackProblemFilterOptions::min_num_views_per_track)
           .def_readwrite("max_num_views_per_track",
-                         &TrackSubsampleOptions::max_num_views_per_track)
-          .def_readwrite("required_tracks_per_view",
-                         &TrackSubsampleOptions::required_tracks_per_view)
-          .def_readwrite("max_num_tracks",
-                         &TrackSubsampleOptions::max_num_tracks);
+                         &TrackProblemFilterOptions::max_num_views_per_track);
   MakeDataclass(PySubOpts);
 
   m.def("establish_full_tracks",
@@ -159,6 +156,6 @@ void BindTrackEstablishment(py::module& m) {
         "images"_a,
         "tracks_full"_a,
         "options"_a,
-        "Greedy length-sorted subsample of ``tracks_full``. Reads "
+        "Filter ``tracks_full`` for the optimization problem. Reads "
         "registered image ids from the keys of the filtered ``images`` dict.");
 }

@@ -21,16 +21,14 @@ inline uint64_t EncodeObservationKey(image_t image_id, point2D_t feature_id) {
 }
 
 void ValidateLoopClosureImagePairMetadata(
-    image_pair_t pair_id,
-    const CorrespondenceGraph::ImagePair& image_pair) {
+    image_pair_t pair_id, const CorrespondenceGraph::ImagePair& image_pair) {
   const int num_matches = image_pair.matches.rows();
   THROW_CHECK_EQ(image_pair.are_lc.size(), static_cast<size_t>(num_matches))
       << "Malformed LC metadata for image pair " << pair_id
       << ": are_lc.size() must match matches.rows()";
   for (const int idx : image_pair.inliers) {
-    THROW_CHECK_GE(idx, 0)
-        << "Malformed LC metadata for image pair " << pair_id
-        << ": negative inlier index";
+    THROW_CHECK_GE(idx, 0) << "Malformed LC metadata for image pair " << pair_id
+                           << ": negative inlier index";
     THROW_CHECK_LT(idx, num_matches)
         << "Malformed LC metadata for image pair " << pair_id
         << ": inlier index outside matches.rows()";
@@ -113,8 +111,8 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
     };
     if (matches.rows() > 0 || !image_pair.inliers.empty()) {
       for (const int idx : image_pair.inliers) {
-        THROW_CHECK_GE(idx, 0) << "Negative inlier index for image pair "
-                               << pair_id;
+        THROW_CHECK_GE(idx, 0)
+            << "Negative inlier index for image pair " << pair_id;
         THROW_CHECK_LT(idx, matches.rows())
             << "Inlier index outside matches.rows() for image pair " << pair_id;
         union_match(static_cast<point2D_t>(matches(idx, 0)),
@@ -226,7 +224,6 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
   return selected;
 }
 
-
 void AppendLoopClosureObservations(
     const std::vector<image_pair_t>& valid_pair_ids,
     const CorrespondenceGraph& corr_graph,
@@ -320,18 +317,18 @@ void AppendLoopClosureObservations(
   }
 }
 
-std::unordered_map<point3D_t, Point3D> SubsampleTracks(
-    const TrackSubsampleOptions& options,
+std::unordered_map<point3D_t, Point3D> FilterTracksForProblem(
+    const TrackProblemFilterOptions& options,
     const std::unordered_set<image_t>& registered_image_ids,
     const std::unordered_map<point3D_t, Point3D>& tracks_full) {
-  // Length filter: lower bound counts regular + LC observations; upper
-  // bound counts regular only. The asymmetry is intentional.
+  // Track admission is based on regular observations only. LC observations may
+  // augment an admitted track, but they must not make a one-view regular track
+  // eligible for global positioning.
   std::vector<std::pair<size_t, point3D_t>> track_lengths;
   size_t dropped_by_length = 0;
   for (const auto& [track_id, point3D] : tracks_full) {
-    const size_t total =
-        point3D.track.Length() + point3D.track.lc_elements.size();
-    if (total < static_cast<size_t>(options.min_num_views_per_track) ||
+    if (point3D.track.Length() <
+            static_cast<size_t>(options.min_num_views_per_track) ||
         point3D.track.Length() >
             static_cast<size_t>(options.max_num_views_per_track)) {
       ++dropped_by_length;
@@ -342,13 +339,12 @@ std::unordered_map<point3D_t, Point3D> SubsampleTracks(
   std::sort(track_lengths.begin(), track_lengths.end(), std::greater<>());
 
   // Selection domain = registered images.
-  std::unordered_map<image_t, int> tracks_per_camera;
+  std::unordered_set<image_t> registered_image_id_set;
   for (const image_t image_id : registered_image_ids) {
-    tracks_per_camera[image_id] = 0;
+    registered_image_id_set.insert(image_id);
   }
 
   std::unordered_map<point3D_t, Point3D> selected;
-  int cameras_left = static_cast<int>(tracks_per_camera.size());
   for (const auto& [track_length, track_id] : track_lengths) {
     const Point3D& src = tracks_full.at(track_id);
 
@@ -356,11 +352,11 @@ std::unordered_map<point3D_t, Point3D> SubsampleTracks(
     // selection domain.
     Point3D candidate;
     for (const auto& el : src.track.Elements()) {
-      if (tracks_per_camera.count(el.image_id) == 0) continue;
+      if (registered_image_id_set.count(el.image_id) == 0) continue;
       candidate.track.AddElement(el);
     }
     for (const auto& lc_el : src.track.lc_elements) {
-      if (tracks_per_camera.count(lc_el.image_id) == 0) continue;
+      if (registered_image_id_set.count(lc_el.image_id) == 0) continue;
       candidate.track.lc_elements.emplace_back(lc_el);
     }
     if (candidate.track.Length() <
@@ -368,24 +364,9 @@ std::unordered_map<point3D_t, Point3D> SubsampleTracks(
       continue;
     }
 
-    // Greedy quota: a track is added if any element's PRE-increment
-    // count is within the target. Counters increment for every kept
-    // element regardless of whether the track was added.
-    bool added = false;
-    for (const auto& el : candidate.track.Elements()) {
-      auto& count = tracks_per_camera[el.image_id];
-      if (count > options.required_tracks_per_view) continue;
-      ++count;
-      if (count > options.required_tracks_per_view) --cameras_left;
-      if (!added) {
-        selected.emplace(track_id, candidate);
-        added = true;
-      }
-    }
-    if (cameras_left == 0) break;
-    if (static_cast<int>(selected.size()) > options.max_num_tracks) break;
+    selected.emplace(track_id, candidate);
   }
-  LOG(INFO) << "Subsampled to " << selected.size() << " tracks (dropped "
+  LOG(INFO) << "Filtered to " << selected.size() << " tracks (dropped "
             << (tracks_full.size() - selected.size()) << ", "
             << dropped_by_length << " by length)";
   return selected;
