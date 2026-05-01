@@ -24,6 +24,19 @@ namespace py = pybind11;
 
 namespace {
 
+std::vector<image_pair_t> CollectValidPairIds(
+    CorrespondenceGraph& correspondence_graph) {
+  std::vector<image_pair_t> pair_ids;
+  pair_ids.reserve(correspondence_graph.NumImagePairs());
+  for (const auto& [pair_id, image_pair] :
+       correspondence_graph.MutableImagePairs()) {
+    if (image_pair.is_valid) {
+      pair_ids.push_back(pair_id);
+    }
+  }
+  return pair_ids;
+}
+
 py::dict RunEstablishFullTracks(CorrespondenceGraph& correspondence_graph,
                                 py::dict images_py,
                                 const TrackEstablishmentOptions& options,
@@ -42,14 +55,8 @@ py::dict RunEstablishFullTracks(CorrespondenceGraph& correspondence_graph,
     image_id_to_keypoints.emplace(image_id, image.features);
   }
 
-  std::vector<image_pair_t> valid_pair_ids;
-  valid_pair_ids.reserve(correspondence_graph.NumImagePairs());
-  for (const auto& [pair_id, image_pair] :
-       correspondence_graph.MutableImagePairs()) {
-    if (image_pair.is_valid) {
-      valid_pair_ids.push_back(pair_id);
-    }
-  }
+  const std::vector<image_pair_t> valid_pair_ids =
+      CollectValidPairIds(correspondence_graph);
 
   std::unordered_map<point3D_t, Point3D> tracks;
   {
