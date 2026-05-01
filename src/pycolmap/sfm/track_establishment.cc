@@ -84,11 +84,7 @@ py::dict RunFindTracksForProblem(py::dict images_py,
                                  const TrackSubsampleOptions& options) {
   std::unordered_set<image_t> registered_image_ids;
   for (auto item : images_py) {
-    const auto image_id = py::cast<image_t>(item.first);
-    const auto image = py::cast<Image>(item.second);
-    if (image.is_registered) {
-      registered_image_ids.insert(image_id);
-    }
+    registered_image_ids.insert(py::cast<image_t>(item.first));
   }
 
   std::unordered_map<point3D_t, Point3D> tracks_full;
@@ -157,5 +153,5 @@ void BindTrackEstablishment(py::module& m) {
         "tracks_full"_a,
         "options"_a,
         "Greedy length-sorted subsample of ``tracks_full``. Reads "
-        "``Image::is_registered`` from ``images``.");
+        "registered image ids from the keys of the filtered ``images`` dict.");
 }

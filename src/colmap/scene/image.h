@@ -161,9 +161,6 @@ class Image {
   // Per-feature angular standard deviations (sigma_x, sigma_y) in radians.
   std::vector<Eigen::Vector2d> angular_stddevs;
 
-  // Whether this image is currently registered.
-  bool is_registered = false;
-
   // Raw 2D keypoints (xy), separate from points2D_.
   std::vector<Eigen::Vector2d> features;
   // Undistorted 3D rays per feature.

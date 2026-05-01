@@ -44,7 +44,6 @@ Image::Image(const Image& other)
     : is_inlier(other.is_inlier),
       is_track_anchor(other.is_track_anchor),
       angular_stddevs(other.angular_stddevs),
-      is_registered(other.is_registered),
       features(other.features),
       features_undist(other.features_undist),
       name_(other.Name()),
@@ -79,7 +78,6 @@ Image& Image::operator=(const Image& other) {
     is_inlier = other.is_inlier;
     is_track_anchor = other.is_track_anchor;
     angular_stddevs = other.angular_stddevs;
-    is_registered = other.is_registered;
     features = other.features;
     features_undist = other.features_undist;
   }

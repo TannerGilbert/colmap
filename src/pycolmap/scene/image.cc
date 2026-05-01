@@ -152,7 +152,6 @@ void BindSceneImage(py::module& m) {
            &Image::HasPixelCovariances,
            "Check if pixel covariances are set and match points2D count.")
       .def_readwrite("angular_stddevs", &Image::angular_stddevs)
-      .def_readwrite("is_registered", &Image::is_registered)
       .def_readwrite("features", &Image::features)
       .def_readwrite("features_undist", &Image::features_undist)
       .def(
