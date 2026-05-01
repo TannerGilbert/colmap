@@ -96,8 +96,7 @@ RotationAveragingProblem::RotationAveragingProblem(
     const std::unordered_set<image_t>& active_image_ids,
     Reconstruction& reconstruction,
     const CorrespondenceGraph* correspondence_graph)
-    : options_(options),
-      correspondence_graph_(correspondence_graph) {
+    : options_(options), correspondence_graph_(correspondence_graph) {
   // skip_risky_lc_pairs requires a CorrespondenceGraph.
   THROW_CHECK(!options_.skip_risky_lc_pairs || correspondence_graph_ != nullptr)
       << "skip_risky_lc_pairs=true requires correspondence_graph; got nullptr";
@@ -254,8 +253,7 @@ void RotationAveragingProblem::BuildPairConstraints(
     if (options_.skip_risky_lc_pairs && correspondence_graph_ != nullptr) {
       const auto& cg_map = correspondence_graph_->ImagePairsMap();
       auto cg_pair_it = cg_map.find(pair_id);
-      if (cg_pair_it != cg_map.end() &&
-          !IsTrackingPair(cg_pair_it->second)) {
+      if (cg_pair_it != cg_map.end() && !IsTrackingPair(cg_pair_it->second)) {
         continue;
       }
     }
@@ -893,10 +891,8 @@ bool RotationAveragingSolver::SolveCeres(RotationAveragingProblem& problem) {
       // (gated on !use_gravity above).
       continue;
     }
-    const auto frame_it1 =
-        image_id_to_frame_id.find(constraint.image_id1);
-    const auto frame_it2 =
-        image_id_to_frame_id.find(constraint.image_id2);
+    const auto frame_it1 = image_id_to_frame_id.find(constraint.image_id1);
+    const auto frame_it2 = image_id_to_frame_id.find(constraint.image_id2);
     if (frame_it1 == image_id_to_frame_id.end() ||
         frame_it2 == image_id_to_frame_id.end()) {
       continue;
@@ -920,12 +916,11 @@ bool RotationAveragingSolver::SolveCeres(RotationAveragingProblem& problem) {
       }
     }
     ceres::LossFunction* loss =
-        is_tracking ? static_cast<ceres::LossFunction*>(
-                          new ceres::HuberLoss(
-                              options_.video_tracking_huber_scale))
-                    : static_cast<ceres::LossFunction*>(
-                          new ceres::CauchyLoss(
-                              options_.video_lc_cauchy_scale));
+        is_tracking
+            ? static_cast<ceres::LossFunction*>(
+                  new ceres::HuberLoss(options_.video_tracking_huber_scale))
+            : static_cast<ceres::LossFunction*>(
+                  new ceres::CauchyLoss(options_.video_lc_cauchy_scale));
 
     ceres::CostFunction* cost = RelativeRotationError::Create(rel_aa);
     ceres_problem.AddResidualBlock(

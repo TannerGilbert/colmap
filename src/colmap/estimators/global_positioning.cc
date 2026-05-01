@@ -133,7 +133,8 @@ void GlobalPositioner::InitializeRandomPositions(
     }
     if (options_.generate_random_positions && options_.optimize_positions &&
         !options_.use_init) {
-      frame_centers_[frame_id] = options_.random_init_scale * RandVector3d(-1, 1);
+      frame_centers_[frame_id] =
+          options_.random_init_scale * RandVector3d(-1, 1);
     } else {
       frame_centers_[frame_id] = frame.RigFromWorld().TgtOriginInSrc();
     }
@@ -175,9 +176,9 @@ void GlobalPositioner::AddPointToCameraConstraints(
 
 void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
                                            Reconstruction& reconstruction) {
-  const bool random_initialization =
-      options_.optimize_points && options_.generate_random_points &&
-      !options_.use_init;
+  const bool random_initialization = options_.optimize_points &&
+                                     options_.generate_random_points &&
+                                     !options_.use_init;
 
   Point3D& point3D = reconstruction.Point3D(point3D_id);
 
@@ -189,17 +190,13 @@ void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
   // Walk regular elements then LC elements as separate passes — they
   // share the residual layout but use different loss function groups.
   for (const auto& observation : point3D.track.Elements()) {
-    AddObservationToProblem(point3D_id,
-                            observation,
-                            random_initialization,
-                            reconstruction);
+    AddObservationToProblem(
+        point3D_id, observation, random_initialization, reconstruction);
   }
   if (options_.use_lc_observations) {
     for (const auto& observation : point3D.track.lc_elements) {
-      AddObservationToProblem(point3D_id,
-                              observation,
-                              random_initialization,
-                              reconstruction);
+      AddObservationToProblem(
+          point3D_id, observation, random_initialization, reconstruction);
     }
   }
 }
@@ -215,13 +212,11 @@ void GlobalPositioner::AddObservationToProblem(point3D_t point3D_id,
   if (!image.HasPose()) return;
 
   const std::optional<Eigen::Vector2d> cam_point =
-      image.CameraPtr()->CamFromImg(
-          image.Point2D(observation.point2D_idx).xy);
+      image.CameraPtr()->CamFromImg(image.Point2D(observation.point2D_idx).xy);
   if (!cam_point.has_value()) {
-    LOG(WARNING)
-        << "Ignoring feature because it failed to project: point3D_id="
-        << point3D_id << ", image_id=" << observation.image_id
-        << ", feature_id=" << observation.point2D_idx;
+    LOG(WARNING) << "Ignoring feature because it failed to project: point3D_id="
+                 << point3D_id << ", image_id=" << observation.image_id
+                 << ", feature_id=" << observation.point2D_idx;
     return;
   }
 
@@ -246,9 +241,8 @@ void GlobalPositioner::AddObservationToProblem(point3D_t point3D_id,
   // Down weight the uncalibrated cameras
   Camera& camera = reconstruction.Camera(image.CameraId());
   ceres::LossFunction* loss_function =
-      (camera.has_prior_focal_length)
-          ? loss_function_ptcam_calibrated_.get()
-          : loss_function_ptcam_uncalibrated_.get();
+      (camera.has_prior_focal_length) ? loss_function_ptcam_calibrated_.get()
+                                      : loss_function_ptcam_uncalibrated_.get();
 
   // If the image is not part of a camera rig, use the standard BATA error
   if (image.IsRefInFrame()) {

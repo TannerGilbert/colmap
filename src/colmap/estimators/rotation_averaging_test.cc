@@ -445,12 +445,12 @@ TEST(RotationAveraging, Gate_LcPenaltyMst_Off_KeepsLcDominantEdge) {
   LcMstFixture data = BuildLcMstFixture();
 
   std::unordered_map<image_t, image_t> parents;
-  const image_t root = ComputeMaximumPoseGraphSpanningTree(
-      data.pose_graph,
-      data.image_ids,
-      parents,
-      /*prioritize_tracking=*/false,
-      &data.correspondence_graph);
+  const image_t root =
+      ComputeMaximumPoseGraphSpanningTree(data.pose_graph,
+                                          data.image_ids,
+                                          parents,
+                                          /*prioritize_tracking=*/false,
+                                          &data.correspondence_graph);
 
   // 3 nodes -> 3 entries in the parent map (one is the root self-loop).
   EXPECT_EQ(parents.size(), 3u);
@@ -469,12 +469,12 @@ TEST(RotationAveraging, Gate_LcPenaltyMst_On_RoutesAroundLcEdge) {
   LcMstFixture data = BuildLcMstFixture();
 
   std::unordered_map<image_t, image_t> parents;
-  const image_t root = ComputeMaximumPoseGraphSpanningTree(
-      data.pose_graph,
-      data.image_ids,
-      parents,
-      /*prioritize_tracking=*/true,
-      &data.correspondence_graph);
+  const image_t root =
+      ComputeMaximumPoseGraphSpanningTree(data.pose_graph,
+                                          data.image_ids,
+                                          parents,
+                                          /*prioritize_tracking=*/true,
+                                          &data.correspondence_graph);
 
   // With the LC penalty active, the 1-2 edge's effective weight is
   // 100 - kLCPenalty (=1e9), so the MST must pick the 1-3 + 2-3 path.
@@ -491,8 +491,7 @@ TEST(RotationAveraging, Gate_LcPenaltyMst_On_RoutesAroundLcEdge) {
   EXPECT_TRUE(root == 1 || root == 2 || root == 3);
 }
 
-TEST(RotationAveraging,
-     Gate_LcPenaltyMst_OnWithoutCgFallsBackToVanilla) {
+TEST(RotationAveraging, Gate_LcPenaltyMst_OnWithoutCgFallsBackToVanilla) {
   // With the gate ON but no correspondence graph, the helper should ignore
   // the LC penalty entirely (the second guard in the ``cg_map_ptr`` ternary).
   // Verifies that the gate alone — without a CG — does not silently change
@@ -640,7 +639,8 @@ TEST(RelativeRotationError, SymmetryUnderSwapAndInvert) {
     const Eigen::Vector3d aa1 = QuaternionToAngleAxisVec(q1);
     const Eigen::Vector3d aa2 = QuaternionToAngleAxisVec(q2);
     const Eigen::Vector3d rel_aa = QuaternionToAngleAxisVec(q_rel);
-    const Eigen::Vector3d rel_aa_inv = QuaternionToAngleAxisVec(q_rel.conjugate());
+    const Eigen::Vector3d rel_aa_inv =
+        QuaternionToAngleAxisVec(q_rel.conjugate());
 
     RelativeRotationError functor_orig(rel_aa);
     RelativeRotationError functor_swap(rel_aa_inv);

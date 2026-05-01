@@ -37,9 +37,9 @@
 namespace colmap {
 
 // Depth prior: constrains cam-frame z of a 3D point against monocular depth
-// with learnable affine correction: depth_pred = shift + mono_depth * exp(scale)
-// Residual: (R*p + t).z - shift - mono_depth * exp(scale)
-// Params: cam_from_world[7], point3D[3], shift_scale[2]
+// with learnable affine correction: depth_pred = shift + mono_depth *
+// exp(scale) Residual: (R*p + t).z - shift - mono_depth * exp(scale) Params:
+// cam_from_world[7], point3D[3], shift_scale[2]
 struct ScaledDepthErrorCostFunctor
     : public AutoDiffCostFunctor<ScaledDepthErrorCostFunctor, 1, 7, 3, 2> {
   explicit ScaledDepthErrorCostFunctor(double depth) : depth_(depth) {}
@@ -104,8 +104,7 @@ struct LogScaledDepthErrorCostFunctor
       *residuals = T(0);
       return true;
     }
-    *residuals =
-        ceres::log(d_pred) - (ceres::log(T(depth_)) + shift_scale[1]);
+    *residuals = ceres::log(d_pred) - (ceres::log(T(depth_)) + shift_scale[1]);
     return true;
   }
 

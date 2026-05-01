@@ -125,11 +125,10 @@ void BindGlobalPositioner(py::module& m) {
                          &GlobalPositionerOptions::use_init,
                          "If true, skip random init for both camera centers "
                          "and track xyz.")
-          .def_readwrite(
-              "use_lc_observations",
-              &GlobalPositionerOptions::use_lc_observations,
-              "If true, AddPoint3DToProblem also iterates "
-              "track.lc_elements (loop-closure observations).")
+          .def_readwrite("use_lc_observations",
+                         &GlobalPositionerOptions::use_lc_observations,
+                         "If true, AddPoint3DToProblem also iterates "
+                         "track.lc_elements (loop-closure observations).")
           .def_readwrite(
               "random_init_scale",
               &GlobalPositionerOptions::random_init_scale,
@@ -257,10 +256,9 @@ void BindRotationEstimator(py::module& m) {
               "Filter pairs with rotation error exceeding this threshold "
               "(degrees).")
           // --- Video / loop-closure extensions ---
-          .def_readwrite(
-              "skip_risky_lc_pairs",
-              &RotationEstimatorOptions::skip_risky_lc_pairs,
-              "Drop pairs whose LC inliers exceed non-LC inliers.")
+          .def_readwrite("skip_risky_lc_pairs",
+                         &RotationEstimatorOptions::skip_risky_lc_pairs,
+                         "Drop pairs whose LC inliers exceed non-LC inliers.")
           .def_readwrite(
               "use_video_constraints",
               &RotationEstimatorOptions::use_video_constraints,
@@ -288,13 +286,12 @@ void BindRotationEstimator(py::module& m) {
         bool success = false;
         {
           py::gil_scoped_release release;
-          success = RunRotationAveraging(
-              options,
-              pose_graph,
-              reconstruction,
-              pose_priors,
-              nullptr,
-              correspondence_graph);
+          success = RunRotationAveraging(options,
+                                         pose_graph,
+                                         reconstruction,
+                                         pose_priors,
+                                         nullptr,
+                                         correspondence_graph);
         }
         return py::cast(success);
       },

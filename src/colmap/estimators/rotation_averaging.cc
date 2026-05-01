@@ -70,10 +70,9 @@ image_t ComputeMaximumPoseGraphSpanningTree(
   // Weight = CG inlier count if available, else num_matches.
   // LC-dominated edges get penalized when prioritize_tracking is set.
   constexpr float kLCPenalty = 1e9f;
-  const auto* cg_map_ptr =
-      (correspondence_graph != nullptr)
-          ? &correspondence_graph->ImagePairsMap()
-          : nullptr;
+  const auto* cg_map_ptr = (correspondence_graph != nullptr)
+                               ? &correspondence_graph->ImagePairsMap()
+                               : nullptr;
 
   for (const auto& [pair_id, edge] : pose_graph.ValidEdges()) {
     const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);

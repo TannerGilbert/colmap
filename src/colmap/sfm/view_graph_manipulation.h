@@ -19,7 +19,8 @@ void UpdateImagePairsConfig(CorrespondenceGraph& view_graph,
 // EstimateTwoViewGeometryPose. PLANAR pairs are upgraded to CALIBRATED.
 // Translations are normalized to unit norm (when non-zero). Mutates
 // view_graph.image_pairs[*].two_view_geometry in place.
-void DecomposeRelPose(CorrespondenceGraph& view_graph, const Reconstruction& rec);
+void DecomposeRelPose(CorrespondenceGraph& view_graph,
+                      const Reconstruction& rec);
 
 // Mark pairs invalid (is_valid=false) when their inlier count is below
 // ``min_inlier_num``.
