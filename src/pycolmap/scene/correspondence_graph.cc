@@ -46,17 +46,46 @@ void BindCorrespondenceGraph(py::module& m) {
   py::classh<CorrespondenceGraph::ImagePair> PyImagePair(m, "ImagePair");
   PyImagePair.def(py::init<>())
       .def(py::init<image_t, image_t>(), "image_id1"_a, "image_id2"_a)
-      .def_readwrite("image_id1",
-                     &CorrespondenceGraph::ImagePair::image_id1)
-      .def_readwrite("image_id2",
-                     &CorrespondenceGraph::ImagePair::image_id2)
+      .def_readwrite("image_id1", &CorrespondenceGraph::ImagePair::image_id1)
+      .def_readwrite("image_id2", &CorrespondenceGraph::ImagePair::image_id2)
       .def_readwrite("pair_id", &CorrespondenceGraph::ImagePair::pair_id)
       .def_readwrite("is_valid", &CorrespondenceGraph::ImagePair::is_valid)
       .def_readwrite("weight", &CorrespondenceGraph::ImagePair::weight)
-      .def_readwrite("matches", &CorrespondenceGraph::ImagePair::matches)
-      .def_readwrite("inliers", &CorrespondenceGraph::ImagePair::inliers)
+      .def_property(
+          "matches",
+          [](const CorrespondenceGraph::ImagePair& p)
+              -> const Eigen::MatrixXi& { return p.matches; },
+          [](CorrespondenceGraph::ImagePair& p, Eigen::MatrixXi v) {
+            THROW_CHECK_EQ(v.cols(), 2);
+            for (Eigen::Index row = 0; row < v.rows(); ++row) {
+              THROW_CHECK_GE(v(row, 0), 0);
+              THROW_CHECK_GE(v(row, 1), 0);
+            }
+            p.matches = std::move(v);
+            p.num_matches = static_cast<point2D_t>(p.matches.rows());
+            p.inliers.clear();
+            p.are_lc.assign(p.matches.rows(), false);
+          })
+      .def_property(
+          "inliers",
+          [](const CorrespondenceGraph::ImagePair& p)
+              -> const std::vector<int>& { return p.inliers; },
+          [](CorrespondenceGraph::ImagePair& p, std::vector<int> v) {
+            for (const int idx : v) {
+              THROW_CHECK_GE(idx, 0);
+              THROW_CHECK_LT(idx, p.matches.rows());
+            }
+            p.inliers = std::move(v);
+          })
       .def_readwrite("cov_t", &CorrespondenceGraph::ImagePair::cov_t)
-      .def_readwrite("are_lc", &CorrespondenceGraph::ImagePair::are_lc)
+      .def_property(
+          "are_lc",
+          [](const CorrespondenceGraph::ImagePair& p)
+              -> const std::vector<bool>& { return p.are_lc; },
+          [](CorrespondenceGraph::ImagePair& p, std::vector<bool> v) {
+            THROW_CHECK_EQ(v.size(), static_cast<size_t>(p.matches.rows()));
+            p.are_lc = std::move(v);
+          })
       .def_readwrite("num_matches",
                      &CorrespondenceGraph::ImagePair::num_matches)
       .def_readwrite("two_view_geometry",

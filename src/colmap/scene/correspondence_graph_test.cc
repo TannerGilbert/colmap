@@ -103,6 +103,13 @@ TEST_P(CorrespondenceGraphFinalizeTest, TwoView) {
   EXPECT_EQ(correspondence_graph.NumMatchesBetweenAllImages().at(pair_id), 4);
   EXPECT_THAT(correspondence_graph.ImagePairs(),
               testing::UnorderedElementsAre(pair_id));
+  const auto& image_pair = correspondence_graph.ImagePairsMap().at(pair_id);
+  EXPECT_EQ(image_pair.image_id1, 0);
+  EXPECT_EQ(image_pair.image_id2, 1);
+  EXPECT_EQ(image_pair.matches.rows(), 4);
+  EXPECT_EQ(image_pair.matches.cols(), 2);
+  EXPECT_EQ(image_pair.inliers, std::vector<int>({0, 1, 2, 3}));
+  EXPECT_EQ(image_pair.are_lc, std::vector<bool>({false, false, false, false}));
   const TwoViewGeometry two_view_geometry01_stored =
       correspondence_graph.ExtractTwoViewGeometry(
           0, 1, /*extract_inlier_matches=*/true);

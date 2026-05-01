@@ -41,7 +41,8 @@ std::vector<image_pair_t> CollectValidPairIds(
 py::dict RunEstablishFullTracks(CorrespondenceGraph& correspondence_graph,
                                 py::dict images_py,
                                 const TrackEstablishmentOptions& options,
-                                bool lc_second_pass) {
+                                bool lc_second_pass,
+                                CorrespondenceGraph* lc_correspondence_graph) {
   std::unordered_map<image_t, Image> images;
   images.reserve(images_py.size());
   for (auto item : images_py) {
@@ -61,12 +62,15 @@ py::dict RunEstablishFullTracks(CorrespondenceGraph& correspondence_graph,
   std::unordered_map<point3D_t, Point3D> tracks;
   {
     py::gil_scoped_release release;
-    MatchPredicate ignore_match;
     TrackEstablishmentOptions to = options;
+    MatchPredicate ignore_match;
     if (lc_second_pass) {
-      ignore_match =
-          MakeLoopClosureMatchPredicate(valid_pair_ids, correspondence_graph);
       to.required_tracks_per_view = std::numeric_limits<int>::max();
+      CorrespondenceGraph& lc_cg = lc_correspondence_graph
+                                       ? *lc_correspondence_graph
+                                       : correspondence_graph;
+      const std::vector<image_pair_t> lc_pair_ids = CollectValidPairIds(lc_cg);
+      ignore_match = MakeLoopClosureMatchPredicate(lc_pair_ids, lc_cg);
     }
     tracks = EstablishTracksFromCorrGraph(valid_pair_ids,
                                           correspondence_graph,
@@ -74,8 +78,11 @@ py::dict RunEstablishFullTracks(CorrespondenceGraph& correspondence_graph,
                                           to,
                                           ignore_match);
     if (lc_second_pass) {
-      AppendLoopClosureObservations(
-          valid_pair_ids, correspondence_graph, tracks);
+      CorrespondenceGraph& lc_cg = lc_correspondence_graph
+                                       ? *lc_correspondence_graph
+                                       : correspondence_graph;
+      const std::vector<image_pair_t> lc_pair_ids = CollectValidPairIds(lc_cg);
+      AppendLoopClosureObservations(lc_pair_ids, lc_cg, tracks);
     }
   }
 
@@ -145,11 +152,13 @@ void BindTrackEstablishment(py::module& m) {
         "images"_a,
         "options"_a,
         "lc_second_pass"_a = false,
+        "lc_correspondence_graph"_a = nullptr,
         "Build tracks from a CorrespondenceGraph + dict-of-images via "
         "the union-find helper. When ``lc_second_pass=True``, "
         "AppendLoopClosureObservations runs after to populate "
         "``Track::lc_elements`` from inliers flagged "
-        "``ImagePair::are_lc==true``.");
+        "``ImagePair::are_lc==true`` in ``lc_correspondence_graph`` "
+        "(falls back to ``correspondence_graph`` if not provided).");
 
   m.def("find_tracks_for_problem",
         &RunFindTracksForProblem,
