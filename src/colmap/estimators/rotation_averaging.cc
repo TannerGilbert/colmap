@@ -444,9 +444,6 @@ void RotationEstimator::InitializeFromMaximumSpanningTree(
   indexes.push(root);
 
   std::unordered_map<image_t, Rigid3d> cams_from_world;
-  const auto& root_image = reconstruction.Image(root);
-  cams_from_world[root] =
-      root_image.HasPose() ? root_image.CamFromWorld() : Rigid3d();
   while (!indexes.empty()) {
     image_t curr = indexes.front();
     indexes.pop();
