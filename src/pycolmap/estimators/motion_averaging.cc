@@ -134,13 +134,10 @@ void BindGlobalPositioner(py::module& m) {
               &GlobalPositionerOptions::random_init_scale,
               "Cube size for random init of camera centers / points (linear).");
 
-  // LC per-bucket loss configs. ``LossConfig`` carries
-  // (type=LossFunctionType enum, scale, weight). Defaults give
-  // unweighted TrivialLoss — equivalent to no override.
-  PyGlobalPositionerOptions
-      .def_readwrite("loss_lc_geometry",
-                     &GlobalPositionerOptions::loss_lc_geometry)
-      .def_readwrite("loss_lc_depth", &GlobalPositionerOptions::loss_lc_depth);
+  // LC geometry loss config. ``LossConfig`` carries
+  // (type=LossFunctionType enum, scale, weight).
+  PyGlobalPositionerOptions.def_readwrite(
+      "loss_lc_geometry", &GlobalPositionerOptions::loss_lc_geometry);
 
   MakeDataclass(PyGlobalPositionerOptions);
 

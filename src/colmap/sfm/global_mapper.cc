@@ -89,16 +89,24 @@ bool GlobalMapper::RotationAveraging(const RotationEstimatorOptions& options) {
   // connected component.
   RotationEstimatorOptions custom_options = options;
   custom_options.filter_unregistered = false;
-  if (!RunRotationAveraging(
-          custom_options, *pose_graph_, *reconstruction_, pose_priors)) {
+  if (!RunRotationAveraging(custom_options,
+                            *pose_graph_,
+                            *reconstruction_,
+                            pose_priors,
+                            nullptr,
+                            database_cache_->CorrespondenceGraph().get())) {
     return false;
   }
 
   // Second pass: re-solve on registered frames only to refine rotations
   // after outlier removal.
   custom_options.filter_unregistered = true;
-  if (!RunRotationAveraging(
-          custom_options, *pose_graph_, *reconstruction_, pose_priors)) {
+  if (!RunRotationAveraging(custom_options,
+                            *pose_graph_,
+                            *reconstruction_,
+                            pose_priors,
+                            nullptr,
+                            database_cache_->CorrespondenceGraph().get())) {
     return false;
   }
 

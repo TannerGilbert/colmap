@@ -45,6 +45,32 @@ TEST(GlobalMapper, WithoutNoise) {
                                  /*max_proj_center_error=*/1e-4));
 }
 
+TEST(GlobalMapper, RotationAveragingForwardsCorrespondenceGraph) {
+  SetPRNGSeed(1);
+  const auto database_path = CreateTestDir() / "database.db";
+
+  auto database = Database::Open(database_path);
+  Reconstruction gt_reconstruction;
+  SyntheticDatasetOptions synthetic_dataset_options;
+  synthetic_dataset_options.num_rigs = 1;
+  synthetic_dataset_options.num_cameras_per_rig = 1;
+  synthetic_dataset_options.num_frames_per_rig = 5;
+  synthetic_dataset_options.num_points3D = 50;
+  synthetic_dataset_options.two_view_geometry_has_relative_pose = true;
+  SynthesizeDataset(
+      synthetic_dataset_options, &gt_reconstruction, database.get());
+
+  auto reconstruction = std::make_shared<Reconstruction>();
+
+  GlobalMapper global_mapper(CreateDatabaseCache(*database));
+  global_mapper.BeginReconstruction(reconstruction);
+
+  RotationEstimatorOptions options;
+  options.skip_risky_lc_pairs = true;
+
+  EXPECT_TRUE(global_mapper.RotationAveraging(options));
+}
+
 TEST(GlobalMapper, WithoutNoiseWithNonTrivialKnownRig) {
   SetPRNGSeed(1);
   const auto database_path = CreateTestDir() / "database.db";

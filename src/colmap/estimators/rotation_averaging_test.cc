@@ -51,16 +51,17 @@ namespace {
 
 void LoadReconstructionAndPoseGraph(const Database& database,
                                     Reconstruction* reconstruction,
-                                    PoseGraph* pose_graph) {
-  DatabaseCache database_cache;
+                                    PoseGraph* pose_graph,
+                                    DatabaseCache* database_cache) {
   DatabaseCache::Options options;
-  database_cache.Load(database, options);
-  reconstruction->Load(database_cache);
-  pose_graph->Load(*database_cache.CorrespondenceGraph());
+  database_cache->Load(database, options);
+  reconstruction->Load(*database_cache);
+  pose_graph->Load(*database_cache->CorrespondenceGraph());
 }
 
 struct TestData {
   std::shared_ptr<Database> database;
+  DatabaseCache database_cache;
   Reconstruction gt_reconstruction;
   Reconstruction reconstruction;
   PoseGraph pose_graph;
@@ -77,8 +78,10 @@ TestData CreateTestData(const SyntheticDatasetOptions& dataset_options,
     SynthesizeNoise(
         *noise_options, &data.gt_reconstruction, data.database.get());
   }
-  LoadReconstructionAndPoseGraph(
-      *data.database, &data.reconstruction, &data.pose_graph);
+  LoadReconstructionAndPoseGraph(*data.database,
+                                 &data.reconstruction,
+                                 &data.pose_graph,
+                                 &data.database_cache);
   data.pose_priors = data.database->ReadAllPosePriors();
   return data;
 }
@@ -341,6 +344,32 @@ TEST(RotationAveraging, GravityWithUnknownRigSensorsReturnsFalse) {
                                            data.pose_priors,
                                            active_image_ids,
                                            data.reconstruction));
+}
+
+TEST(RotationAveraging, SkipRiskyLcPairsWithUnknownRigUsesCorrespondenceGraph) {
+  SetPRNGSeed(1);
+
+  SyntheticDatasetOptions synthetic_dataset_options;
+  synthetic_dataset_options.num_rigs = 1;
+  synthetic_dataset_options.num_cameras_per_rig = 2;
+  synthetic_dataset_options.num_frames_per_rig = 4;
+  synthetic_dataset_options.num_points3D = 50;
+  synthetic_dataset_options.sensor_from_rig_rotation_stddev = 20.;
+  synthetic_dataset_options.two_view_geometry_has_relative_pose = true;
+  auto data = CreateTestData(synthetic_dataset_options);
+
+  ResetSensorsFromRig(data.reconstruction);
+
+  RotationEstimatorOptions options = CreateRATestOptions();
+  options.skip_risky_lc_pairs = true;
+
+  EXPECT_TRUE(
+      RunRotationAveraging(options,
+                           data.pose_graph,
+                           data.reconstruction,
+                           data.pose_priors,
+                           nullptr,
+                           data.database_cache.CorrespondenceGraph().get()));
 }
 
 // LC-penalty branch inside ComputeMaximumPoseGraphSpanningTree.

@@ -15,6 +15,11 @@ Eigen::Vector3d RandVector3d(double low, double high) {
                          RandomUniformReal(low, high));
 }
 
+bool IsLossConfigOverride(const LossConfig& loss_config) {
+  return loss_config.type != LossFunctionType::TRIVIAL ||
+         loss_config.scale != 1.0 || loss_config.weight != 1.0;
+}
+
 }  // namespace
 
 GlobalPositioner::GlobalPositioner(const GlobalPositionerOptions& options)
@@ -79,6 +84,10 @@ void GlobalPositioner::SetupProblem(const PoseGraph& pose_graph,
   problem_options.loss_function_ownership = ceres::DO_NOT_TAKE_OWNERSHIP;
   problem_ = std::make_unique<ceres::Problem>(problem_options);
   loss_function_ = options_.CreateLossFunction();
+  cached_loss_lc_geometry_ =
+      IsLossConfigOverride(options_.loss_lc_geometry)
+          ? options_.loss_lc_geometry.CreateLossFunction()
+          : nullptr;
 
   // Clear temporary storage from previous runs.
   frame_centers_.clear();
@@ -195,8 +204,11 @@ void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
   }
   if (options_.use_lc_observations) {
     for (const auto& observation : point3D.track.lc_elements) {
-      AddObservationToProblem(
-          point3D_id, observation, random_initialization, reconstruction);
+      AddObservationToProblem(point3D_id,
+                              observation,
+                              random_initialization,
+                              reconstruction,
+                              /*is_lc_observation=*/true);
     }
   }
 }
@@ -204,7 +216,8 @@ void GlobalPositioner::AddPoint3DToProblem(point3D_t point3D_id,
 void GlobalPositioner::AddObservationToProblem(point3D_t point3D_id,
                                                const TrackElement& observation,
                                                bool random_initialization,
-                                               Reconstruction& reconstruction) {
+                                               Reconstruction& reconstruction,
+                                               bool is_lc_observation) {
   Point3D& point3D = reconstruction.Point3D(point3D_id);
   if (!reconstruction.ExistsImage(observation.image_id)) return;
 
@@ -243,6 +256,9 @@ void GlobalPositioner::AddObservationToProblem(point3D_t point3D_id,
   ceres::LossFunction* loss_function =
       (camera.has_prior_focal_length) ? loss_function_ptcam_calibrated_.get()
                                       : loss_function_ptcam_uncalibrated_.get();
+  if (is_lc_observation && cached_loss_lc_geometry_) {
+    loss_function = cached_loss_lc_geometry_.get();
+  }
 
   // If the image is not part of a camera rig, use the standard BATA error
   if (image.IsRefInFrame()) {

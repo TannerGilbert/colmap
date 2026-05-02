@@ -64,9 +64,8 @@ struct GlobalPositionerOptions {
   // Cube half-extent for random initialization of positions and points.
   double random_init_scale = 100.0;
 
-  // Per-observation loss configs for LC routing.
+  // Per-observation geometry loss config for LC routing.
   LossConfig loss_lc_geometry;
-  LossConfig loss_lc_depth;
 
   GlobalPositionerOptions() {
     solver_options.num_threads = -1;
@@ -109,7 +108,8 @@ class GlobalPositioner {
   void AddObservationToProblem(point3D_t point3D_id,
                                const TrackElement& observation,
                                bool random_initialization,
-                               Reconstruction& reconstruction);
+                               Reconstruction& reconstruction,
+                               bool is_lc_observation = false);
 
   // Set the parameter groups
   void AddCamerasAndPointsToParameterGroups(Reconstruction& reconstruction);
@@ -129,6 +129,7 @@ class GlobalPositioner {
   std::shared_ptr<ceres::LossFunction> loss_function_;
   std::shared_ptr<ceres::LossFunction> loss_function_ptcam_uncalibrated_;
   std::shared_ptr<ceres::LossFunction> loss_function_ptcam_calibrated_;
+  std::shared_ptr<ceres::LossFunction> cached_loss_lc_geometry_;
 
   // Auxiliary scale variables.
   std::vector<double> scales_;

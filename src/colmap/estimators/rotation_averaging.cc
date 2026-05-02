@@ -676,7 +676,9 @@ bool RunRotationAveraging(
             pose_graph,
             pose_priors,
             expanded_active_image_ids,
-            recon_expanded)) {
+            recon_expanded,
+            nullptr,
+            correspondence_graph)) {
       return false;
     }
 
