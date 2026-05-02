@@ -40,35 +40,24 @@
 
 #include <algorithm>
 #include <fstream>
+#include <type_traits>
 #include <unordered_map>
 
 namespace colmap {
 namespace {
 
-bool ShouldDeriveSequentialLoopClosureProvenance(
-    const SequentialPairingOptions& options) {
-  return options.mark_non_consecutive_as_lc;
-}
-
 template <typename PairingOptions>
-bool ShouldDeriveSequentialLoopClosureProvenance(
-    const PairingOptions& /*options*/) {
-  return false;
-}
-
-std::function<void()> MakeDeriveSequentialLoopClosureProvenanceFn(
-    const SequentialPairingOptions& options,
+std::function<void()> MaybeMakeSequentialLcPostprocessor(
+    const PairingOptions& options,
     const std::shared_ptr<FeatureMatcherCache>& cache) {
-  return [options, cache]() {
-    DeriveSequentialLoopClosureProvenance(cache, options);
-  };
-}
-
-template <typename PairingOptions>
-std::function<void()> MakeDeriveSequentialLoopClosureProvenanceFn(
-    const PairingOptions& /*options*/,
-    const std::shared_ptr<FeatureMatcherCache>& /*cache*/) {
-  return []() {};
+  if constexpr (std::is_same_v<PairingOptions, SequentialPairingOptions>) {
+    if (options.mark_non_consecutive_as_lc) {
+      return [options, cache]() {
+        DeriveSequentialLoopClosureProvenance(cache, options);
+      };
+    }
+  }
+  return nullptr;
 }
 
 void RigVerification(const std::shared_ptr<Database>& database,
@@ -203,8 +192,7 @@ class FeatureMatcherThread : public Thread {
         geometry_options,
         database,
         cache,
-        ShouldDeriveSequentialLoopClosureProvenance(pairing_options),
-        MakeDeriveSequentialLoopClosureProvenanceFn(pairing_options, cache),
+        MaybeMakeSequentialLcPostprocessor(pairing_options, cache),
         [pairing_options, cache]() {
           return std::make_unique<PairGeneratorType>(pairing_options, cache);
         });
@@ -216,16 +204,13 @@ class FeatureMatcherThread : public Thread {
                        const TwoViewGeometryOptions& geometry_options,
                        std::shared_ptr<Database> database,
                        std::shared_ptr<FeatureMatcherCache> cache,
-                       const bool derive_loop_closure_provenance,
-                       std::function<void()> derive_loop_closure_provenance_fn,
+                       std::function<void()> sequential_lc_postprocess_fn,
                        PairGeneratorFactory pair_generator_factory)
       : matching_options_(matching_options),
         geometry_options_(geometry_options),
         database_(std::move(database)),
         cache_(std::move(cache)),
-        derive_loop_closure_provenance_(derive_loop_closure_provenance),
-        derive_loop_closure_provenance_fn_(
-            std::move(derive_loop_closure_provenance_fn)),
+        sequential_lc_postprocess_fn_(std::move(sequential_lc_postprocess_fn)),
         pair_generator_factory_(std::move(pair_generator_factory)),
         matcher_(matching_options, geometry_options, cache_) {
     THROW_CHECK(matching_options.Check());
@@ -253,7 +238,7 @@ class FeatureMatcherThread : public Thread {
       }
       Timer timer;
       timer.Start();
-      if (derive_loop_closure_provenance_) {
+      if (sequential_lc_postprocess_fn_) {
         const std::vector<std::pair<image_t, image_t>> image_pairs =
             pair_generator->Next();
         matcher_.Match(image_pairs);
@@ -280,10 +265,10 @@ class FeatureMatcherThread : public Thread {
       run_timer.PrintMinutes();
     }
 
-    if (derive_loop_closure_provenance_) {
+    if (sequential_lc_postprocess_fn_) {
       run_timer.Restart();
       LOG_HEADING1("Deriving sequential loop-closure provenance");
-      derive_loop_closure_provenance_fn_();
+      sequential_lc_postprocess_fn_();
       run_timer.PrintMinutes();
     }
   }
@@ -292,8 +277,7 @@ class FeatureMatcherThread : public Thread {
   const TwoViewGeometryOptions geometry_options_;
   const std::shared_ptr<Database> database_;
   const std::shared_ptr<FeatureMatcherCache> cache_;
-  const bool derive_loop_closure_provenance_;
-  const std::function<void()> derive_loop_closure_provenance_fn_;
+  const std::function<void()> sequential_lc_postprocess_fn_;
   const PairGeneratorFactory pair_generator_factory_;
   FeatureMatcherController matcher_;
 };
@@ -314,8 +298,7 @@ class GeometricVerifierThread : public Thread {
         geometry_options,
         database,
         cache,
-        ShouldDeriveSequentialLoopClosureProvenance(pairing_options),
-        MakeDeriveSequentialLoopClosureProvenanceFn(pairing_options, cache),
+        MaybeMakeSequentialLcPostprocessor(pairing_options, cache),
         [pairing_options, cache]() {
           return std::make_unique<PairGeneratorType>(pairing_options, cache);
         });
@@ -327,16 +310,13 @@ class GeometricVerifierThread : public Thread {
                           const TwoViewGeometryOptions& geometry_options,
                           std::shared_ptr<Database> database,
                           std::shared_ptr<FeatureMatcherCache> cache,
-                          const bool derive_loop_closure_provenance,
                           std::function<void()>
-                              derive_loop_closure_provenance_fn,
+                              sequential_lc_postprocess_fn,
                           PairGeneratorFactory pair_generator_factory)
       : geometry_options_(geometry_options),
         database_(std::move(database)),
         cache_(std::move(cache)),
-        derive_loop_closure_provenance_(derive_loop_closure_provenance),
-        derive_loop_closure_provenance_fn_(
-            std::move(derive_loop_closure_provenance_fn)),
+        sequential_lc_postprocess_fn_(std::move(sequential_lc_postprocess_fn)),
         pair_generator_factory_(std::move(pair_generator_factory)),
         verifier_(verifier_options, geometry_options, cache_) {
     THROW_CHECK(geometry_options.Check());
@@ -363,7 +343,7 @@ class GeometricVerifierThread : public Thread {
       }
       Timer timer;
       timer.Start();
-      if (derive_loop_closure_provenance_) {
+      if (sequential_lc_postprocess_fn_) {
         const std::vector<std::pair<image_t, image_t>> image_pairs =
             pair_generator->Next();
         verifier_.Verify(image_pairs);
@@ -385,10 +365,10 @@ class GeometricVerifierThread : public Thread {
       run_timer.PrintMinutes();
     }
 
-    if (derive_loop_closure_provenance_) {
+    if (sequential_lc_postprocess_fn_) {
       run_timer.Restart();
       LOG_HEADING1("Deriving sequential loop-closure provenance");
-      derive_loop_closure_provenance_fn_();
+      sequential_lc_postprocess_fn_();
       run_timer.PrintMinutes();
     }
 
@@ -398,8 +378,7 @@ class GeometricVerifierThread : public Thread {
   const TwoViewGeometryOptions geometry_options_;
   const std::shared_ptr<Database> database_;
   const std::shared_ptr<FeatureMatcherCache> cache_;
-  const bool derive_loop_closure_provenance_;
-  const std::function<void()> derive_loop_closure_provenance_fn_;
+  const std::function<void()> sequential_lc_postprocess_fn_;
   const PairGeneratorFactory pair_generator_factory_;
   GeometricVerifierController verifier_;
 };
