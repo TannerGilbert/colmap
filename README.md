@@ -39,6 +39,57 @@ Getting Started
 3. Use the **automatic reconstruction** to easily build models
    with a single click or command.
 
+Sequential Track Provenance Workflow
+------------------------------------
+
+This branch can annotate a sequential-matcher database with per-inlier track
+provenance for global SfM. The workflow is intentionally split into separate
+database stages, so an existing verified database can be reused without
+rerunning feature extraction, matching, or geometric verification.
+
+First create the normal COLMAP database. This step is LC-free unless
+track provenance is explicitly enabled:
+
+```bash
+DATASET_PATH=/path/to/project
+
+colmap feature_extractor \
+    --database_path "$DATASET_PATH/database.db" \
+    --image_path "$DATASET_PATH/images"
+
+colmap sequential_matcher \
+    --database_path "$DATASET_PATH/database.db" \
+    --SequentialMatching.use_track_provenance 0
+```
+
+Then derive track provenance as a separate in-place database update. Pass the
+same `SequentialMatching` options that were used for the sequential matcher
+step, especially overlap, loop-detection, and vocabulary-tree options:
+
+```bash
+cp "$DATASET_PATH/database.db" "$DATASET_PATH/database_track_provenance.db"
+
+colmap track_provenance \
+    --database_path "$DATASET_PATH/database_track_provenance.db"
+```
+
+Finally run mapping from the augmented database. No earlier stage has to be
+recomputed:
+
+```bash
+mkdir -p "$DATASET_PATH/sparse"
+
+colmap global_mapper \
+    --database_path "$DATASET_PATH/database_track_provenance.db" \
+    --image_path "$DATASET_PATH/images" \
+    --output_path "$DATASET_PATH/sparse"
+```
+
+`track_provenance` only rewrites `two_view_geometries`: direct consecutive
+pairs remain tracking/non-LC, transitive inliers remain non-LC, and the
+remaining inliers in generated non-direct pairs are marked as LC. The augmented
+database can be reused directly by later mapper runs.
+
 Documentation
 -------------
 

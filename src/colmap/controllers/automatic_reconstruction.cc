@@ -293,7 +293,7 @@ void AutomaticReconstructionController::RunFeatureMatching() {
   }
   if (options_.data_type == DataType::VIDEO) {
     DeriveTrackProvenance(*option_manager_.database_path,
-                                          *option_manager_.sequential_pairing);
+                          *option_manager_.sequential_pairing);
   }
   exhaustive_matcher_.reset();
   sequential_matcher_.reset();

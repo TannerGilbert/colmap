@@ -149,6 +149,7 @@ int main(int argc, char** argv) {
 #if defined(COLMAP_MVS_ENABLED)
   commands.emplace_back("stereo_fusion", &colmap::RunStereoFuser);
 #endif
+  commands.emplace_back("track_provenance", &colmap::RunTrackProvenance);
   commands.emplace_back("transitive_matcher", &colmap::RunTransitiveMatcher);
   commands.emplace_back("view_graph_calibrator",
                         &colmap::RunViewGraphCalibrator);

@@ -301,7 +301,21 @@ int RunSequentialMatcher(int argc, char** argv) {
     matcher->Wait();
   }
   DeriveTrackProvenance(*options.database_path,
-                                        *options.sequential_pairing);
+                        *options.sequential_pairing);
+
+  return EXIT_SUCCESS;
+}
+
+int RunTrackProvenance(int argc, char** argv) {
+  OptionManager options;
+  options.AddDatabaseOptions();
+  options.AddSequentialPairingOptions();
+  if (!options.Parse(argc, argv)) {
+    return EXIT_FAILURE;
+  }
+  options.sequential_pairing->use_track_provenance = true;
+
+  DeriveTrackProvenance(*options.database_path, *options.sequential_pairing);
 
   return EXIT_SUCCESS;
 }
