@@ -34,6 +34,8 @@ void BindEstimators(py::module& m) {
   BindTriangulationEstimator(m);
   BindTwoViewGeometryEstimator(m);
   BindMotionAveraging(m);
-  // BindViewGraphCalibration deferred to pipeline/bindings.cc (depends on
-  // ViewGraphCalibrationOptions registered by BindPipeline).
+  // BindViewGraphCalibration is called from pipeline/bindings.cc — it depends
+  // on ViewGraphCalibrationOptions which is registered by BindPipeline (after
+  // BindEstimators), so the def must run later or stub generation chokes on
+  // the raw C++ type name in the docstring.
 }

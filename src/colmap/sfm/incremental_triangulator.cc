@@ -329,8 +329,9 @@ size_t IncrementalTriangulator::Retriangulate(
 
     const auto [image_id1, image_id2] = PairIdToImagePair(image_pair.first);
 
-    if (ignore_image_ids && (ignore_image_ids->count(image_id1) > 0 ||
-                             ignore_image_ids->count(image_id2) > 0)) {
+    if (ignore_image_ids &&
+        (ignore_image_ids->count(image_id1) > 0 ||
+         ignore_image_ids->count(image_id2) > 0)) {
       continue;
     }
 

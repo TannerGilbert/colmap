@@ -53,7 +53,9 @@ void BindUndistortion(py::module& m) {
       "distorted_camera"_a,
       "Undistort image and corresponding camera.");
 
-  // FORK-REMOVAL TODO: binds fork-only UndistortImageFeatures.
+  // FORK-REMOVAL TODO — `undistort_images` binds the fork-only
+  // ``UndistortImageFeatures``. See
+  // `.claude/notes/glomap_audit/fork_removal_todo.md` for the removal plan.
   m.def(
       "undistort_images",
       [](Reconstruction& rec, bool clean_points) {

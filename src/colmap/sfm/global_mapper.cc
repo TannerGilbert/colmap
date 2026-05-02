@@ -137,11 +137,11 @@ void GlobalMapper::EstablishTracks(const GlobalMapperOptions& options) {
     valid_pair_ids.push_back(pair_id);
   }
 
-  auto selected =
-      EstablishTracksFromCorrGraph(valid_pair_ids,
-                                   *database_cache_->CorrespondenceGraph(),
-                                   image_id_to_keypoints,
-                                   to);
+  auto selected = EstablishTracksFromCorrGraph(
+      valid_pair_ids,
+      *database_cache_->CorrespondenceGraph(),
+      image_id_to_keypoints,
+      to);
   for (auto& [point3D_id, point3D] : selected) {
     reconstruction_->AddPoint3D(point3D_id, std::move(point3D));
   }

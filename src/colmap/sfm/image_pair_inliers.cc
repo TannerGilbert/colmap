@@ -8,7 +8,12 @@ namespace colmap {
 namespace {
 constexpr double EPS = 1e-12;
 
-// PoseLib-style cheirality with z-distance bounds (unbatched).
+// Single-pair PoseLib-style cheirality with min/max ray-distance bounds.
+// Native ``CheckCheirality`` (`colmap/geometry/pose.h`) is batched and
+// has no z bound — different surface — so this stays as a static helper
+// colocated with its only caller.
+//
+// Code from PoseLib by Viktor Larsson.
 bool CheckCheirality(const Rigid3d& pose,
                      const Eigen::Vector3d& x1,
                      const Eigen::Vector3d& x2,
@@ -40,7 +45,9 @@ double GetOrientationSignum(const Eigen::Matrix3d& F,
   return signum1 * signum2;
 }
 
-// Sampson error on Vec3 bearing rays (divides by z+EPS).
+// Sampson error on Vec3 rays (divides by ``z + EPS`` first). Native
+// ``ComputeSquaredSampsonError`` is the Vec2 overload — this variant
+// operates on bearing rays from ``Image::features_undist``.
 double SampsonError(const Eigen::Matrix3d& E,
                     const Eigen::Vector3d& x1,
                     const Eigen::Vector3d& x2) {

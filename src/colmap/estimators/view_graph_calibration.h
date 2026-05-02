@@ -105,8 +105,11 @@ struct FocalLengthCalibInput {
   Eigen::Matrix3d F = Eigen::Matrix3d::Zero();
 };
 
-// Result of Ceres focal-length calibration. Rejected cameras keep initial
-// focal length. calibration_errors_sq has one entry per input pair.
+// Result of the inner Ceres focal-length calibration. ``focal_lengths`` is
+// populated for every camera in ``cameras``; rejected ones are reset to the
+// camera's initial focal length. ``calibration_errors_sq`` is populated only
+// for pairs that were added to the Ceres problem (one entry per ``inputs``
+// element, in the same order).
 struct FocalLengthCalibResult {
   std::unordered_map<camera_t, double> focal_lengths;
   std::unordered_map<image_pair_t, double> calibration_errors_sq;

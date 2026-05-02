@@ -823,4 +823,5 @@ bool RotationAveragingSolver::SolveIRLS(RotationAveragingProblem& problem) {
   return true;
 }
 
+
 }  // namespace colmap
