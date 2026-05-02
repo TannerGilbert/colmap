@@ -13,8 +13,10 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 
 #include <pybind11/eigen.h>
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
@@ -25,22 +27,44 @@ namespace py = pybind11;
 
 namespace {
 
+// std::vector<bool> is bit-packed, so expose an owned NumPy array instead of
+// trying to map its storage directly.
+py::array_t<bool> BoolVectorToArray(const std::vector<bool>& values) {
+  py::array_t<bool> array(values.size());
+  auto view = array.mutable_unchecked<1>();
+  for (py::ssize_t i = 0; i < view.shape(0); ++i) {
+    view(i) = values[static_cast<size_t>(i)];
+  }
+  return array;
+}
+
+void AssignBoolVector(
+    std::vector<bool>& target,
+    const py::array_t<bool, py::array::c_style | py::array::forcecast>& values) {
+  if (values.ndim() != 1) {
+    throw std::runtime_error("Expected a 1D bool array.");
+  }
+  const auto view = values.unchecked<1>();
+  target.assign(static_cast<size_t>(view.shape(0)), false);
+  for (py::ssize_t i = 0; i < view.shape(0); ++i) {
+    target[static_cast<size_t>(i)] = view(i);
+  }
+}
+
 template <typename PyClass>
 void DefBoolVectorProperty(PyClass& cls,
                            const char* name,
                            std::vector<bool> Image::*member) {
   cls.def_property(
       name,
-      [member](const Image& self) -> Eigen::Array<bool, Eigen::Dynamic, 1> {
-        const auto& vec = self.*member;
-        Eigen::Array<bool, Eigen::Dynamic, 1> arr(vec.size());
-        for (size_t i = 0; i < vec.size(); ++i) arr[i] = vec[i];
-        return arr;
+      [member](const Image& self) {
+        return BoolVectorToArray(self.*member);
       },
-      [member](Image& self, const Eigen::Array<bool, Eigen::Dynamic, 1>& v) {
-        auto& vec = self.*member;
-        vec.assign(v.size(), false);
-        for (Eigen::Index i = 0; i < v.size(); ++i) vec[i] = v[i];
+      [member](
+          Image& self,
+          const py::array_t<bool, py::array::c_style | py::array::forcecast>&
+              values) {
+        AssignBoolVector(self.*member, values);
       });
 }
 
