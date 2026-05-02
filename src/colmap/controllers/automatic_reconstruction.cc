@@ -35,7 +35,7 @@
 #include "colmap/controllers/hierarchical_pipeline.h"
 #include "colmap/controllers/incremental_pipeline.h"
 #include "colmap/controllers/option_manager.h"
-#include "colmap/controllers/sequential_loop_closure.h"
+#include "colmap/controllers/track_provenance.h"
 #include "colmap/controllers/undistorters.h"
 #include "colmap/estimators/view_graph_calibration.h"
 #if defined(COLMAP_MVS_ENABLED)
@@ -292,7 +292,7 @@ void AutomaticReconstructionController::RunFeatureMatching() {
     return;
   }
   if (options_.data_type == DataType::VIDEO) {
-    DeriveSequentialLoopClosureProvenance(*option_manager_.database_path,
+    DeriveTrackProvenance(*option_manager_.database_path,
                                           *option_manager_.sequential_pairing);
   }
   exhaustive_matcher_.reset();

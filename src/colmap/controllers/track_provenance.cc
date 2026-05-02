@@ -1,4 +1,4 @@
-#include "colmap/controllers/sequential_loop_closure.h"
+#include "colmap/controllers/track_provenance.h"
 
 #include "colmap/scene/correspondence_graph.h"
 #include "colmap/scene/database.h"
@@ -59,9 +59,9 @@ void MergeLoopClosureInlierMatches(
   }
 }
 
-class AdjacentTransitiveMatchExtractor {
+class AdjacentTrackMatchExtractor {
  public:
-  explicit AdjacentTransitiveMatchExtractor(
+  explicit AdjacentTrackMatchExtractor(
       std::shared_ptr<FeatureMatcherCache> cache)
       : cache_(std::move(cache)) {
     BuildSequenceIndex();
@@ -242,25 +242,25 @@ std::unordered_set<image_pair_t> GenerateSequentialPairIds(
 
 }  // namespace
 
-bool SequentialLoopClosurePostprocessEnabled(
+bool TrackProvenanceEnabled(
     const SequentialPairingOptions& options) {
-  return options.use_lc_provenance;
+  return options.use_track_provenance;
 }
 
-void DeriveSequentialLoopClosureProvenance(
+void DeriveTrackProvenance(
     const std::shared_ptr<FeatureMatcherCache>& cache,
     const SequentialPairingOptions& options,
     const std::function<bool()>& is_stopped) {
   THROW_CHECK_NOTNULL(cache);
-  if (!SequentialLoopClosurePostprocessEnabled(options)) {
+  if (!TrackProvenanceEnabled(options)) {
     return;
   }
 
   Timer timer;
   timer.Start();
-  LOG_HEADING1("Deriving sequential loop-closure provenance");
+  LOG_HEADING1("Deriving sequential track provenance");
 
-  AdjacentTransitiveMatchExtractor transitive_match_extractor(cache);
+  AdjacentTrackMatchExtractor transitive_match_extractor(cache);
   const std::unordered_set<image_pair_t> generated_pair_ids =
       GenerateSequentialPairIds(cache, options);
   const auto finalize_geometry = [&](const image_t image_id1,
@@ -316,17 +316,17 @@ void DeriveSequentialLoopClosureProvenance(
   timer.PrintMinutes();
 }
 
-void DeriveSequentialLoopClosureProvenance(
+void DeriveTrackProvenance(
     const std::filesystem::path& database_path,
     const SequentialPairingOptions& options,
     const std::function<bool()>& is_stopped) {
-  if (!SequentialLoopClosurePostprocessEnabled(options)) {
+  if (!TrackProvenanceEnabled(options)) {
     return;
   }
   auto database = Database::Open(database_path);
   auto cache = std::make_shared<FeatureMatcherCache>(
       options.CacheSize(), std::move(database));
-  DeriveSequentialLoopClosureProvenance(cache, options, is_stopped);
+  DeriveTrackProvenance(cache, options, is_stopped);
 }
 
 }  // namespace colmap

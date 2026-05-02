@@ -30,7 +30,7 @@
 #include "colmap/ui/feature_matching_widget.h"
 
 #include "colmap/controllers/feature_matching.h"
-#include "colmap/controllers/sequential_loop_closure.h"
+#include "colmap/controllers/track_provenance.h"
 #include "colmap/feature/sift.h"
 #ifdef COLMAP_ONNX_ENABLED
 #include "colmap/feature/aliked.h"
@@ -109,7 +109,7 @@ class SequentialFeatureMatchingThread : public Thread {
     matcher_->Start();
     matcher_->Wait();
     if (!IsStopped()) {
-      DeriveSequentialLoopClosureProvenance(
+      DeriveTrackProvenance(
           database_path_, pairing_options_, [this]() { return IsStopped(); });
     }
   }
@@ -314,8 +314,8 @@ SequentialMatchingTab::SequentialMatchingTab(QWidget* parent,
       "loop_detection_max_num_features",
       -1);
   options_widget_->AddOptionBool(
-      &options_->sequential_pairing->use_lc_provenance,
-      "use_lc_provenance");
+      &options_->sequential_pairing->use_track_provenance,
+      "use_track_provenance");
   options_widget_->AddOptionFilePath(
       &options_->sequential_pairing->vocab_tree_path, "vocab_tree_path");
 

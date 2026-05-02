@@ -131,10 +131,10 @@ TEST(VocabTreePairGenerator, Nominal) {
 
 TEST(SequentialPairingOptions, LoopClosurePostprocessFlags) {
   SequentialPairingOptions options;
-  EXPECT_FALSE(options.use_lc_provenance);
+  EXPECT_FALSE(options.use_track_provenance);
 
-  options.use_lc_provenance = true;
-  EXPECT_TRUE(options.use_lc_provenance);
+  options.use_track_provenance = true;
+  EXPECT_TRUE(options.use_track_provenance);
 }
 
 TEST(SequentialPairGenerator, Linear) {

@@ -1,4 +1,4 @@
-#include "colmap/controllers/sequential_loop_closure.h"
+#include "colmap/controllers/track_provenance.h"
 
 #include "colmap/controllers/feature_matching.h"
 #include "colmap/scene/synthetic.h"
@@ -43,7 +43,7 @@ std::vector<Image> OrderedImages(Database& database) {
   return images;
 }
 
-TEST(SequentialLoopClosurePostprocess, MergesTransitiveAndCandidateRows) {
+TEST(TrackProvenance, MergesTransitiveAndCandidateRows) {
   auto data = CreateTestData(3);
   const std::vector<Image> images = OrderedImages(*data.database);
   ASSERT_GE(images.size(), 3);
@@ -68,8 +68,8 @@ TEST(SequentialLoopClosurePostprocess, MergesTransitiveAndCandidateRows) {
   SequentialPairingOptions options;
   options.overlap = 2;
   options.quadratic_overlap = false;
-  options.use_lc_provenance = true;
-  DeriveSequentialLoopClosureProvenance(data.cache, options);
+  options.use_track_provenance = true;
+  DeriveTrackProvenance(data.cache, options);
 
   const TwoViewGeometry direct12 =
       data.database->ReadTwoViewGeometry(image_id1, image_id2);
@@ -87,7 +87,7 @@ TEST(SequentialLoopClosurePostprocess, MergesTransitiveAndCandidateRows) {
   EXPECT_TRUE(derived13.is_loop_closure);
 }
 
-TEST(SequentialLoopClosurePostprocess, UsesDirectPairsAsTrackingSeeds) {
+TEST(TrackProvenance, UsesDirectPairsAsTrackingSeeds) {
   auto data = CreateTestData(3);
   const std::vector<Image> images = OrderedImages(*data.database);
   ASSERT_GE(images.size(), 3);
@@ -114,8 +114,8 @@ TEST(SequentialLoopClosurePostprocess, UsesDirectPairsAsTrackingSeeds) {
   SequentialPairingOptions options;
   options.overlap = 2;
   options.quadratic_overlap = false;
-  options.use_lc_provenance = true;
-  DeriveSequentialLoopClosureProvenance(data.cache, options);
+  options.use_track_provenance = true;
+  DeriveTrackProvenance(data.cache, options);
 
   const TwoViewGeometry cleaned12 =
       data.database->ReadTwoViewGeometry(image_id1, image_id2);
@@ -133,7 +133,7 @@ TEST(SequentialLoopClosurePostprocess, UsesDirectPairsAsTrackingSeeds) {
   EXPECT_TRUE(derived13.is_loop_closure);
 }
 
-TEST(SequentialLoopClosurePostprocess, IgnoresPairsOutsideGeneratedSet) {
+TEST(TrackProvenance, IgnoresPairsOutsideGeneratedSet) {
   auto data = CreateTestData(4);
   const std::vector<Image> images = OrderedImages(*data.database);
   ASSERT_GE(images.size(), 4);
@@ -163,8 +163,8 @@ TEST(SequentialLoopClosurePostprocess, IgnoresPairsOutsideGeneratedSet) {
   SequentialPairingOptions options;
   options.overlap = 2;
   options.quadratic_overlap = false;
-  options.use_lc_provenance = true;
-  DeriveSequentialLoopClosureProvenance(data.cache, options);
+  options.use_track_provenance = true;
+  DeriveTrackProvenance(data.cache, options);
 
   const TwoViewGeometry ignored =
       data.database->ReadTwoViewGeometry(image_id1, image_id4);
@@ -172,7 +172,7 @@ TEST(SequentialLoopClosurePostprocess, IgnoresPairsOutsideGeneratedSet) {
   EXPECT_TRUE(ignored.inlier_matches_are_lc.empty());
 }
 
-TEST(SequentialLoopClosurePostprocess, KeepsRigFramePairsNonLc) {
+TEST(TrackProvenance, KeepsRigFramePairsNonLc) {
   const auto database_path = CreateTestDir() / "database.db";
   auto database = Database::Open(database_path);
 
@@ -209,8 +209,8 @@ TEST(SequentialLoopClosurePostprocess, KeepsRigFramePairsNonLc) {
   pairing_options.overlap = 1;
   pairing_options.quadratic_overlap = false;
   pairing_options.expand_rig_images = true;
-  pairing_options.use_lc_provenance = true;
-  DeriveSequentialLoopClosureProvenance(cache, pairing_options);
+  pairing_options.use_track_provenance = true;
+  DeriveTrackProvenance(cache, pairing_options);
 
   const TwoViewGeometry same_frame_tvg =
       database->ReadTwoViewGeometry(same_frame_image1, same_frame_image2);
@@ -224,7 +224,7 @@ TEST(SequentialLoopClosurePostprocess, KeepsRigFramePairsNonLc) {
   EXPECT_TRUE(adjacent_frame_tvg.inlier_matches_are_lc.empty());
 }
 
-TEST(SequentialLoopClosurePostprocess, UsesRigFrameDistanceForExpandedPairs) {
+TEST(TrackProvenance, UsesRigFrameDistanceForExpandedPairs) {
   const auto database_path = CreateTestDir() / "database.db";
   auto database = Database::Open(database_path);
 
@@ -263,8 +263,8 @@ TEST(SequentialLoopClosurePostprocess, UsesRigFrameDistanceForExpandedPairs) {
   pairing_options.overlap = 2;
   pairing_options.quadratic_overlap = false;
   pairing_options.expand_rig_images = true;
-  pairing_options.use_lc_provenance = true;
-  DeriveSequentialLoopClosureProvenance(cache, pairing_options);
+  pairing_options.use_track_provenance = true;
+  DeriveTrackProvenance(cache, pairing_options);
 
   const TwoViewGeometry derived = database->ReadTwoViewGeometry(
       images[0].ImageId(), images[5].ImageId());
@@ -275,7 +275,7 @@ TEST(SequentialLoopClosurePostprocess, UsesRigFrameDistanceForExpandedPairs) {
   EXPECT_TRUE(derived.is_loop_closure);
 }
 
-TEST(SequentialLoopClosurePostprocess, StopsBeforeWritingRemainingPairs) {
+TEST(TrackProvenance, StopsBeforeWritingRemainingPairs) {
   auto data = CreateTestData(3);
   const std::vector<Image> images = OrderedImages(*data.database);
   ASSERT_GE(images.size(), 3);
@@ -296,9 +296,9 @@ TEST(SequentialLoopClosurePostprocess, StopsBeforeWritingRemainingPairs) {
   SequentialPairingOptions options;
   options.overlap = 2;
   options.quadratic_overlap = false;
-  options.use_lc_provenance = true;
+  options.use_track_provenance = true;
 
-  DeriveSequentialLoopClosureProvenance(data.cache, options, []() {
+  DeriveTrackProvenance(data.cache, options, []() {
     return true;
   });
 
@@ -308,7 +308,7 @@ TEST(SequentialLoopClosurePostprocess, StopsBeforeWritingRemainingPairs) {
   EXPECT_TRUE(unchanged.inlier_matches_are_lc.empty());
 }
 
-TEST(SequentialLoopClosurePostprocess, RunsAfterSequentialMatcher) {
+TEST(TrackProvenance, RunsAfterSequentialMatcher) {
   auto data = CreateTestData(5);
   data.database->ClearMatches();
   data.database->ClearTwoViewGeometries();
@@ -316,7 +316,7 @@ TEST(SequentialLoopClosurePostprocess, RunsAfterSequentialMatcher) {
   SequentialPairingOptions pairing_options;
   pairing_options.overlap = 2;
   pairing_options.quadratic_overlap = false;
-  pairing_options.use_lc_provenance = true;
+  pairing_options.use_track_provenance = true;
 
   FeatureMatchingOptions matching_options;
   matching_options.use_gpu = false;
@@ -337,7 +337,7 @@ TEST(SequentialLoopClosurePostprocess, RunsAfterSequentialMatcher) {
   EXPECT_FALSE(before.is_loop_closure);
   EXPECT_TRUE(before.inlier_matches_are_lc.empty());
 
-  DeriveSequentialLoopClosureProvenance(data.database_path, pairing_options);
+  DeriveTrackProvenance(data.database_path, pairing_options);
 
   const TwoViewGeometry after =
       data.database->ReadTwoViewGeometry(images[0].ImageId(),

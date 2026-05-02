@@ -42,7 +42,7 @@ COLMAP_ADD_LIBRARY(
         feature_matching_utils.h feature_matching_utils.cc
         matcher_cache.h matcher_cache.cc
         pairing.h pairing.cc
-        sequential_loop_closure.h sequential_loop_closure.cc
+        track_provenance.h track_provenance.cc
         global_pipeline.h global_pipeline.cc
         image_reader.h image_reader.cc
         incremental_pipeline.h incremental_pipeline.cc
@@ -118,8 +118,8 @@ COLMAP_ADD_TEST(
     LINK_LIBS colmap_controllers
 )
 COLMAP_ADD_TEST(
-    NAME sequential_loop_closure_test
-    SRCS sequential_loop_closure_test.cc
+    NAME track_provenance_test
+    SRCS track_provenance_test.cc
     LINK_LIBS colmap_controllers
 )
 COLMAP_ADD_TEST(
