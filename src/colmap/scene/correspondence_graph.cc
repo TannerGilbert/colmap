@@ -37,6 +37,43 @@
 
 namespace colmap {
 
+namespace {
+
+FeatureMatches ExtractStoredMatches(
+    const CorrespondenceGraph::ImagePair& image_pair,
+    const image_t image_id1,
+    const image_t image_id2) {
+  const bool same_order =
+      image_id1 == image_pair.image_id1 && image_id2 == image_pair.image_id2;
+  const bool reverse_order =
+      image_id1 == image_pair.image_id2 && image_id2 == image_pair.image_id1;
+  THROW_CHECK(same_order || reverse_order);
+
+  FeatureMatches matches;
+  matches.reserve(static_cast<size_t>(image_pair.matches.rows()));
+  const Eigen::Index col1 = same_order ? 0 : 1;
+  const Eigen::Index col2 = same_order ? 1 : 0;
+  for (Eigen::Index row = 0; row < image_pair.matches.rows(); ++row) {
+    matches.emplace_back(static_cast<point2D_t>(image_pair.matches(row, col1)),
+                         static_cast<point2D_t>(image_pair.matches(row, col2)));
+  }
+  return matches;
+}
+
+void RestoreStoredInlierMatches(
+    const CorrespondenceGraph::ImagePair& image_pair,
+    const image_t image_id1,
+    const image_t image_id2,
+    TwoViewGeometry* two_view_geometry) {
+  THROW_CHECK_EQ(image_pair.are_lc.size(),
+                 static_cast<size_t>(image_pair.matches.rows()));
+  two_view_geometry->inlier_matches =
+      ExtractStoredMatches(image_pair, image_id1, image_id2);
+  two_view_geometry->inlier_matches_are_lc = image_pair.are_lc;
+}
+
+}  // namespace
+
 std::unordered_map<image_pair_t, point2D_t>
 CorrespondenceGraph::NumMatchesBetweenAllImages() const {
   std::unordered_map<image_pair_t, point2D_t> num_matches_between_images;
@@ -361,25 +398,8 @@ struct TwoViewGeometry CorrespondenceGraph::ExtractTwoViewGeometry(
   }
   // Extract after inversion, as they are extracted in the correct order.
   if (extract_inlier_matches) {
-    const auto& image_pair = image_pair_it->second;
-    THROW_CHECK_EQ(image_pair.are_lc.size(),
-                   static_cast<size_t>(image_pair.matches.rows()));
-    const bool stored_order =
-        image_id1 == image_pair.image_id1 && image_id2 == image_pair.image_id2;
-    const bool reversed_order =
-        image_id1 == image_pair.image_id2 && image_id2 == image_pair.image_id1;
-    THROW_CHECK(stored_order || reversed_order);
-    two_view_geometry.inlier_matches.reserve(image_pair.are_lc.size());
-    two_view_geometry.inlier_matches_are_lc = image_pair.are_lc;
-    for (Eigen::Index i = 0; i < image_pair.matches.rows(); ++i) {
-      if (stored_order) {
-        two_view_geometry.inlier_matches.emplace_back(image_pair.matches(i, 0),
-                                                      image_pair.matches(i, 1));
-      } else {
-        two_view_geometry.inlier_matches.emplace_back(image_pair.matches(i, 1),
-                                                      image_pair.matches(i, 0));
-      }
-    }
+    RestoreStoredInlierMatches(
+        image_pair_it->second, image_id1, image_id2, &two_view_geometry);
   }
   return two_view_geometry;
 }
