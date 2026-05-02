@@ -39,27 +39,6 @@ namespace colmap {
 
 namespace {
 
-FeatureMatches ExtractStoredMatches(
-    const CorrespondenceGraph::ImagePair& image_pair,
-    const image_t image_id1,
-    const image_t image_id2) {
-  const bool same_order =
-      image_id1 == image_pair.image_id1 && image_id2 == image_pair.image_id2;
-  const bool reverse_order =
-      image_id1 == image_pair.image_id2 && image_id2 == image_pair.image_id1;
-  THROW_CHECK(same_order || reverse_order);
-
-  FeatureMatches matches;
-  matches.reserve(static_cast<size_t>(image_pair.matches.rows()));
-  const Eigen::Index col1 = same_order ? 0 : 1;
-  const Eigen::Index col2 = same_order ? 1 : 0;
-  for (Eigen::Index row = 0; row < image_pair.matches.rows(); ++row) {
-    matches.emplace_back(static_cast<point2D_t>(image_pair.matches(row, col1)),
-                         static_cast<point2D_t>(image_pair.matches(row, col2)));
-  }
-  return matches;
-}
-
 void RestoreStoredInlierMatches(
     const CorrespondenceGraph::ImagePair& image_pair,
     const image_t image_id1,
@@ -67,8 +46,24 @@ void RestoreStoredInlierMatches(
     TwoViewGeometry* two_view_geometry) {
   THROW_CHECK_EQ(image_pair.are_lc.size(),
                  static_cast<size_t>(image_pair.matches.rows()));
-  two_view_geometry->inlier_matches =
-      ExtractStoredMatches(image_pair, image_id1, image_id2);
+
+  const bool requested_order =
+      image_id1 == image_pair.image_id1 && image_id2 == image_pair.image_id2;
+  const bool reversed_order =
+      image_id1 == image_pair.image_id2 && image_id2 == image_pair.image_id1;
+  THROW_CHECK(requested_order || reversed_order);
+
+  auto& matches = two_view_geometry->inlier_matches;
+  matches.clear();
+  matches.reserve(static_cast<size_t>(image_pair.matches.rows()));
+  for (Eigen::Index row = 0; row < image_pair.matches.rows(); ++row) {
+    FeatureMatch match(static_cast<point2D_t>(image_pair.matches(row, 0)),
+                       static_cast<point2D_t>(image_pair.matches(row, 1)));
+    if (reversed_order) {
+      std::swap(match.point2D_idx1, match.point2D_idx2);
+    }
+    matches.push_back(match);
+  }
   two_view_geometry->inlier_matches_are_lc = image_pair.are_lc;
 }
 
