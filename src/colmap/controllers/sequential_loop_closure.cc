@@ -101,25 +101,6 @@ class AdjacentTransitiveMatchExtractor {
     return IsAdjacentPair(image_id1, image_id2);
   }
 
-  bool IsSequentialOverlapPair(const image_t image_id1,
-                               const image_t image_id2,
-                               const SequentialPairingOptions& options) const {
-    const size_t distance = SequenceDistance(image_id1, image_id2);
-    if (distance == kInvalidDistance || distance <= 1) {
-      return false;
-    }
-
-    if (options.quadratic_overlap) {
-      for (int i = 1; i < options.overlap; ++i) {
-        if (distance == (1ull << i)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    return distance <= static_cast<size_t>(options.overlap);
-  }
-
   FeatureMatches ExtractBetweenImages(const image_t image_id1,
                                       const image_t image_id2) {
     EnsureGraphBuilt();
@@ -292,7 +273,7 @@ std::unordered_set<image_pair_t> GenerateSequentialPairIds(
 
 bool SequentialLoopClosurePostprocessEnabled(
     const SequentialPairingOptions& options) {
-  return options.mark_non_consecutive_as_lc || options.mark_loop_detection_as_lc;
+  return options.use_lc_provenance;
 }
 
 void DeriveSequentialLoopClosureProvenance(
@@ -323,18 +304,6 @@ void DeriveSequentialLoopClosureProvenance(
 
     if (transitive_match_extractor.IsDirectSequentialPair(image_id1,
                                                           image_id2)) {
-      two_view_geometry->inlier_matches_are_lc.clear();
-      two_view_geometry->is_loop_closure = false;
-      return;
-    }
-
-    const bool is_sequential_overlap =
-        transitive_match_extractor.IsSequentialOverlapPair(
-            image_id1, image_id2, options);
-    const bool should_classify =
-        (is_sequential_overlap && options.mark_non_consecutive_as_lc) ||
-        (!is_sequential_overlap && options.mark_loop_detection_as_lc);
-    if (!should_classify) {
       two_view_geometry->inlier_matches_are_lc.clear();
       two_view_geometry->is_loop_closure = false;
       return;

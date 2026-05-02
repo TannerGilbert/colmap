@@ -6,8 +6,7 @@ import pycolmap
 
 def test_lc_provenance_defaults() -> None:
     sequential_options = pycolmap.SequentialPairingOptions()
-    assert not sequential_options.mark_loop_detection_as_lc
-    assert not sequential_options.mark_non_consecutive_as_lc
+    assert not sequential_options.use_lc_provenance
 
     global_positioner_options = pycolmap.GlobalPositionerOptions()
     assert not global_positioner_options.use_lc_observations
@@ -19,10 +18,8 @@ def test_lc_provenance_defaults() -> None:
 
 def test_lc_provenance_bindings_roundtrip(tmp_path: Path) -> None:
     sequential_options = pycolmap.SequentialPairingOptions()
-    sequential_options.mark_loop_detection_as_lc = True
-    sequential_options.mark_non_consecutive_as_lc = True
-    assert sequential_options.mark_loop_detection_as_lc
-    assert sequential_options.mark_non_consecutive_as_lc
+    sequential_options.use_lc_provenance = True
+    assert sequential_options.use_lc_provenance
 
     two_view_geometry = pycolmap.TwoViewGeometry()
     assert not two_view_geometry.is_loop_closure

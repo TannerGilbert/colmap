@@ -138,8 +138,7 @@ TEST(OptionManager, WriteAndRead) {
   *options_write.image_path = test_dir / "images";
   options_write.feature_extraction->max_image_size = 2048;
   options_write.feature_extraction->sift->max_num_features = 4096;
-  options_write.sequential_pairing->mark_loop_detection_as_lc = true;
-  options_write.sequential_pairing->mark_non_consecutive_as_lc = true;
+  options_write.sequential_pairing->use_lc_provenance = true;
   options_write.mapper->min_num_matches = 20;
   options_write.global_mapper->mapper.track_lc_second_pass = true;
   options_write.global_mapper->mapper.global_positioning.use_lc_observations =
@@ -172,10 +171,8 @@ TEST(OptionManager, WriteAndRead) {
             options_write.feature_extraction->max_image_size);
   EXPECT_EQ(options_read.feature_extraction->sift->max_num_features,
             options_write.feature_extraction->sift->max_num_features);
-  EXPECT_EQ(options_read.sequential_pairing->mark_loop_detection_as_lc,
-            options_write.sequential_pairing->mark_loop_detection_as_lc);
-  EXPECT_EQ(options_read.sequential_pairing->mark_non_consecutive_as_lc,
-            options_write.sequential_pairing->mark_non_consecutive_as_lc);
+  EXPECT_EQ(options_read.sequential_pairing->use_lc_provenance,
+            options_write.sequential_pairing->use_lc_provenance);
   EXPECT_EQ(options_read.mapper->min_num_matches,
             options_write.mapper->min_num_matches);
   EXPECT_EQ(options_read.global_mapper->mapper.track_lc_second_pass,

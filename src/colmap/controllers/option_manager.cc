@@ -405,10 +405,8 @@ void OptionManager::AddSequentialPairingOptions() {
       &sequential_pairing->loop_detection_num_images_after_verification);
   AddDefaultOption("SequentialMatching.loop_detection_max_num_features",
                    &sequential_pairing->loop_detection_max_num_features);
-  AddDefaultOption("SequentialMatching.mark_loop_detection_as_lc",
-                   &sequential_pairing->mark_loop_detection_as_lc);
-  AddDefaultOption("SequentialMatching.mark_non_consecutive_as_lc",
-                   &sequential_pairing->mark_non_consecutive_as_lc);
+  AddDefaultOption("SequentialMatching.use_lc_provenance",
+                   &sequential_pairing->use_lc_provenance);
   AddDefaultOption("SequentialMatching.vocab_tree_path",
                    &sequential_pairing->vocab_tree_path);
   AddDefaultOption("SequentialMatching.num_threads",

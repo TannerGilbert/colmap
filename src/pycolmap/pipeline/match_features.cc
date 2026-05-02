@@ -219,15 +219,10 @@ void BindMatchFeatures(py::module& m) {
               "an image. If an image has more features, only the "
               "largest-scale features will be indexed.")
           .def_readwrite(
-              "mark_loop_detection_as_lc",
-              &SequentialPairingOptions::mark_loop_detection_as_lc,
-              "Whether verified loop-detection pairs should be marked as "
-              "loop closures in the database.")
-          .def_readwrite(
-              "mark_non_consecutive_as_lc",
-              &SequentialPairingOptions::mark_non_consecutive_as_lc,
-              "Whether non-consecutive sequential-overlap pairs should be "
-              "marked as loop closure candidates.")
+              "use_lc_provenance",
+              &SequentialPairingOptions::use_lc_provenance,
+              "Whether to use loop-closure provenance after sequential "
+              "matching.")
           .def_readwrite("vocab_tree_path",
                          &SequentialPairingOptions::vocab_tree_path,
                          "Path to the vocabulary tree.")

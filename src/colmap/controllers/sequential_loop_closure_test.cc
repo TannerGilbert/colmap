@@ -97,7 +97,7 @@ TEST(SequentialLoopClosurePostprocess, MergesTransitiveAndCandidateRows) {
   SequentialPairingOptions options;
   options.overlap = 2;
   options.quadratic_overlap = false;
-  options.mark_non_consecutive_as_lc = true;
+  options.use_lc_provenance = true;
   DeriveSequentialLoopClosureProvenance(data.cache, options);
 
   const TwoViewGeometry direct12 =
@@ -143,7 +143,7 @@ TEST(SequentialLoopClosurePostprocess, UsesDirectPairsAsTrackingSeeds) {
   SequentialPairingOptions options;
   options.overlap = 2;
   options.quadratic_overlap = false;
-  options.mark_non_consecutive_as_lc = true;
+  options.use_lc_provenance = true;
   DeriveSequentialLoopClosureProvenance(data.cache, options);
 
   const TwoViewGeometry cleaned12 =
@@ -192,13 +192,8 @@ TEST(SequentialLoopClosurePostprocess, IgnoresPairsOutsideGeneratedSet) {
   SequentialPairingOptions options;
   options.overlap = 2;
   options.quadratic_overlap = false;
-  options.mark_loop_detection_as_lc = true;
+  options.use_lc_provenance = true;
   DeriveSequentialLoopClosureProvenance(data.cache, options);
-
-  const TwoViewGeometry not_lc =
-      data.database->ReadTwoViewGeometry(image_id1, image_id3);
-  EXPECT_FALSE(not_lc.is_loop_closure);
-  EXPECT_TRUE(not_lc.inlier_matches_are_lc.empty());
 
   const TwoViewGeometry ignored =
       data.database->ReadTwoViewGeometry(image_id1, image_id4);
@@ -243,7 +238,7 @@ TEST(SequentialLoopClosurePostprocess, KeepsRigFramePairsNonLc) {
   pairing_options.overlap = 1;
   pairing_options.quadratic_overlap = false;
   pairing_options.expand_rig_images = true;
-  pairing_options.mark_non_consecutive_as_lc = true;
+  pairing_options.use_lc_provenance = true;
   DeriveSequentialLoopClosureProvenance(cache, pairing_options);
 
   const TwoViewGeometry same_frame_tvg =
@@ -297,7 +292,7 @@ TEST(SequentialLoopClosurePostprocess, UsesRigFrameDistanceForExpandedPairs) {
   pairing_options.overlap = 2;
   pairing_options.quadratic_overlap = false;
   pairing_options.expand_rig_images = true;
-  pairing_options.mark_non_consecutive_as_lc = true;
+  pairing_options.use_lc_provenance = true;
   DeriveSequentialLoopClosureProvenance(cache, pairing_options);
 
   const TwoViewGeometry derived = database->ReadTwoViewGeometry(
@@ -330,7 +325,7 @@ TEST(SequentialLoopClosurePostprocess, StopsBeforeWritingRemainingPairs) {
   SequentialPairingOptions options;
   options.overlap = 2;
   options.quadratic_overlap = false;
-  options.mark_non_consecutive_as_lc = true;
+  options.use_lc_provenance = true;
 
   DeriveSequentialLoopClosureProvenance(data.cache, options, []() {
     return true;
@@ -350,7 +345,7 @@ TEST(SequentialLoopClosurePostprocess, RunsAfterSequentialMatcher) {
   SequentialPairingOptions pairing_options;
   pairing_options.overlap = 2;
   pairing_options.quadratic_overlap = false;
-  pairing_options.mark_non_consecutive_as_lc = true;
+  pairing_options.use_lc_provenance = true;
 
   FeatureMatchingOptions matching_options;
   matching_options.use_gpu = false;
