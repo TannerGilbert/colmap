@@ -56,6 +56,15 @@ void MergeLoopClosureInlierMatches(const FeatureMatches& transitive_matches,
                                    FeatureMatches* merged_matches,
                                    std::vector<bool>* merged_matches_are_lc);
 
+// Derive loop-closure provenance from the verified database state. Consecutive
+// image pairs in name order and same/adjacent-frame rig pairs are treated as
+// direct non-LC tracking pairs. For each remaining pair, transitive matches
+// through direct pairs are merged as non-LC rows and the remaining candidate
+// rows are marked LC.
+void DeriveSequentialLoopClosureProvenance(
+    const std::shared_ptr<FeatureMatcherCache>& cache,
+    const SequentialPairingOptions& options);
+
 class FeatureMatcherWorker : public Thread {
  public:
   using Input = FeatureMatcherData;

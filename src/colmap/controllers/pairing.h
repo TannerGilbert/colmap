@@ -363,7 +363,6 @@ class SequentialPairGenerator : public PairGenerator {
  private:
   std::vector<image_t> GetOrderedImageIds() const;
   std::vector<FeatureMatcherImagePair> NextImageBatchedWithProvenance();
-  std::vector<FeatureMatcherImagePair> NextDistanceBatchedWithProvenance();
 
   const SequentialPairingOptions options_;
   const std::shared_ptr<FeatureMatcherCache> cache_;
@@ -374,8 +373,6 @@ class SequentialPairGenerator : public PairGenerator {
   std::unique_ptr<VocabTreePairGenerator> vocab_tree_pair_generator_;
   std::vector<std::pair<image_t, image_t>> image_pairs_;
   std::vector<FeatureMatcherImagePair> image_pairs_with_provenance_;
-  std::vector<size_t> overlap_distances_;
-  size_t overlap_distance_idx_ = 0;
   size_t image_idx_ = 0;
 };
 

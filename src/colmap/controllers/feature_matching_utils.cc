@@ -193,14 +193,43 @@ void PreserveInlierLoopClosureProvenance(const TwoViewGeometry& prior,
 class AdjacentTransitiveMatchExtractor {
  public:
   explicit AdjacentTransitiveMatchExtractor(
-      std::shared_ptr<FeatureMatcherCache> cache)
-      : cache_(std::move(cache)) {
+      std::shared_ptr<FeatureMatcherCache> cache,
+      const bool use_all_adjacent_inliers = false,
+      const bool use_frame_adjacency = false)
+      : cache_(std::move(cache)),
+        use_all_adjacent_inliers_(use_all_adjacent_inliers),
+        use_frame_adjacency_(use_frame_adjacency) {
     BuildSequenceIndex();
   }
 
   bool IsDirectSequentialPair(const image_t image_id1,
                               const image_t image_id2) const {
     return IsAdjacentPair(image_id1, image_id2);
+  }
+
+  bool IsSequentialOverlapPair(const image_t image_id1,
+                               const image_t image_id2,
+                               const SequentialPairingOptions& options) const {
+    const auto seq_idx1_it = image_id_to_sequence_idx_.find(image_id1);
+    const auto seq_idx2_it = image_id_to_sequence_idx_.find(image_id2);
+    if (seq_idx1_it == image_id_to_sequence_idx_.end() ||
+        seq_idx2_it == image_id_to_sequence_idx_.end()) {
+      return false;
+    }
+    const size_t distance = std::max(seq_idx1_it->second, seq_idx2_it->second) -
+                            std::min(seq_idx1_it->second, seq_idx2_it->second);
+    if (distance <= 1) {
+      return false;
+    }
+    if (options.quadratic_overlap) {
+      for (int i = 1; i < options.overlap; ++i) {
+        if (distance == (1ull << i)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    return distance <= static_cast<size_t>(options.overlap);
   }
 
   FeatureMatches ExtractBetweenImages(const image_t image_id1,
@@ -271,7 +300,16 @@ class AdjacentTransitiveMatchExtractor {
 
     image_id_to_sequence_idx_.reserve(ordered_images.size());
     for (size_t idx = 0; idx < ordered_images.size(); ++idx) {
-      image_id_to_sequence_idx_.emplace(ordered_images[idx].ImageId(), idx);
+      const Image& image = ordered_images[idx];
+      image_id_to_sequence_idx_.emplace(image.ImageId(), idx);
+      if (image.HasFrameId()) {
+        image_id_to_frame_id_.emplace(image.ImageId(), image.FrameId());
+        auto [it, inserted] =
+            frame_id_to_sequence_idx_.emplace(image.FrameId(), idx);
+        if (!inserted) {
+          it->second = std::min(it->second, idx);
+        }
+      }
     }
   }
 
@@ -293,6 +331,26 @@ class AdjacentTransitiveMatchExtractor {
   }
 
   bool IsAdjacentPair(const image_t image_id1, const image_t image_id2) const {
+    const auto frame_id1_it = image_id_to_frame_id_.find(image_id1);
+    const auto frame_id2_it = image_id_to_frame_id_.find(image_id2);
+    if (use_frame_adjacency_ &&
+        frame_id1_it != image_id_to_frame_id_.end() &&
+        frame_id2_it != image_id_to_frame_id_.end()) {
+      if (frame_id1_it->second == frame_id2_it->second) {
+        return true;
+      }
+      const auto frame_idx1_it =
+          frame_id_to_sequence_idx_.find(frame_id1_it->second);
+      const auto frame_idx2_it =
+          frame_id_to_sequence_idx_.find(frame_id2_it->second);
+      if (frame_idx1_it != frame_id_to_sequence_idx_.end() &&
+          frame_idx2_it != frame_id_to_sequence_idx_.end()) {
+        return std::max(frame_idx1_it->second, frame_idx2_it->second) -
+                   std::min(frame_idx1_it->second, frame_idx2_it->second) ==
+               1;
+      }
+    }
+
     const auto seq_idx1_it = image_id_to_sequence_idx_.find(image_id1);
     const auto seq_idx2_it = image_id_to_sequence_idx_.find(image_id2);
     if (seq_idx1_it == image_id_to_sequence_idx_.end() ||
@@ -316,7 +374,7 @@ class AdjacentTransitiveMatchExtractor {
     FeatureMatches non_lc_matches;
     non_lc_matches.reserve(two_view_geometry.inlier_matches.size());
     for (size_t i = 0; i < two_view_geometry.inlier_matches.size(); ++i) {
-      if (!IsLcInlier(two_view_geometry, i)) {
+      if (use_all_adjacent_inliers_ || !IsLcInlier(two_view_geometry, i)) {
         non_lc_matches.push_back(two_view_geometry.inlier_matches[i]);
       }
     }
@@ -334,7 +392,11 @@ class AdjacentTransitiveMatchExtractor {
 
   std::shared_ptr<FeatureMatcherCache> cache_;
   std::unordered_map<image_t, size_t> image_id_to_sequence_idx_;
+  std::unordered_map<image_t, frame_t> image_id_to_frame_id_;
+  std::unordered_map<frame_t, size_t> frame_id_to_sequence_idx_;
   CorrespondenceGraph correspondence_graph_;
+  bool use_all_adjacent_inliers_ = false;
+  bool use_frame_adjacency_ = false;
   bool graph_built_ = false;
 };
 
@@ -395,6 +457,67 @@ void FinalizeLoopClosureProvenance(
 }
 
 }  // namespace
+
+void DeriveSequentialLoopClosureProvenance(
+    const std::shared_ptr<FeatureMatcherCache>& cache,
+    const SequentialPairingOptions& options) {
+  THROW_CHECK_NOTNULL(cache);
+
+  AdjacentTransitiveMatchExtractor transitive_match_extractor(
+      cache,
+      /*use_all_adjacent_inliers=*/true,
+      /*use_frame_adjacency=*/true);
+  const auto finalize_geometry = [&](const image_t image_id1,
+                                     const image_t image_id2,
+                                     TwoViewGeometry* two_view_geometry) {
+    THROW_CHECK_NOTNULL(two_view_geometry);
+    if (two_view_geometry->inlier_matches.empty()) {
+      two_view_geometry->inlier_matches_are_lc.clear();
+      two_view_geometry->is_loop_closure = false;
+      return;
+    }
+
+    if (transitive_match_extractor.IsDirectSequentialPair(image_id1,
+                                                          image_id2)) {
+      two_view_geometry->inlier_matches_are_lc.clear();
+      two_view_geometry->is_loop_closure = false;
+      return;
+    }
+    if (!options.mark_loop_detection_as_lc &&
+        !transitive_match_extractor.IsSequentialOverlapPair(
+            image_id1, image_id2, options)) {
+      two_view_geometry->inlier_matches_are_lc.clear();
+      two_view_geometry->is_loop_closure = false;
+      return;
+    }
+
+    const FeatureMatches transitive_matches =
+        transitive_match_extractor.ExtractBetweenImages(image_id1, image_id2);
+
+    FeatureMatches merged_matches;
+    std::vector<bool> inlier_matches_are_lc;
+    MergeLoopClosureInlierMatches(transitive_matches,
+                                  two_view_geometry->inlier_matches,
+                                  &merged_matches,
+                                  &inlier_matches_are_lc);
+    two_view_geometry->inlier_matches = std::move(merged_matches);
+    two_view_geometry->inlier_matches_are_lc = std::move(inlier_matches_are_lc);
+    two_view_geometry->is_loop_closure =
+        HasLoopClosureInliers(*two_view_geometry);
+  };
+
+  std::vector<std::pair<image_pair_t, TwoViewGeometry>> two_view_geometries;
+  cache->AccessDatabase([&](Database& database) {
+    two_view_geometries = database.ReadTwoViewGeometries();
+  });
+
+  for (auto& [pair_id, two_view_geometry] : two_view_geometries) {
+    const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
+    finalize_geometry(image_id1, image_id2, &two_view_geometry);
+    cache->DeleteTwoViewGeometry(image_id1, image_id2);
+    cache->WriteTwoViewGeometry(image_id1, image_id2, two_view_geometry);
+  }
+}
 
 FeatureMatcherWorker::FeatureMatcherWorker(
     const FeatureMatchingOptions& matching_options,

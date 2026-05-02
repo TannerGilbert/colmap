@@ -162,23 +162,24 @@ TEST(SequentialPairGenerator, Linear) {
   SequentialPairingOptions options;
   options.overlap = 3;
   options.quadratic_overlap = false;
-  options.mark_non_consecutive_as_lc = true;
   SequentialPairGenerator generator(options, database);
   EXPECT_THAT(generator.Next(),
               testing::ElementsAre(
                   std::make_pair(images[0].ImageId(), images[1].ImageId()),
-                  std::make_pair(images[1].ImageId(), images[2].ImageId()),
-                  std::make_pair(images[2].ImageId(), images[3].ImageId()),
-                  std::make_pair(images[3].ImageId(), images[4].ImageId())));
+                  std::make_pair(images[0].ImageId(), images[2].ImageId()),
+                  std::make_pair(images[0].ImageId(), images[3].ImageId())));
   EXPECT_THAT(generator.Next(),
               testing::ElementsAre(
-                  std::make_pair(images[0].ImageId(), images[2].ImageId()),
+                  std::make_pair(images[1].ImageId(), images[2].ImageId()),
                   std::make_pair(images[1].ImageId(), images[3].ImageId()),
+                  std::make_pair(images[1].ImageId(), images[4].ImageId())));
+  EXPECT_THAT(generator.Next(),
+              testing::ElementsAre(
+                  std::make_pair(images[2].ImageId(), images[3].ImageId()),
                   std::make_pair(images[2].ImageId(), images[4].ImageId())));
   EXPECT_THAT(generator.Next(),
-              testing::ElementsAre(
-                  std::make_pair(images[0].ImageId(), images[3].ImageId()),
-                  std::make_pair(images[1].ImageId(), images[4].ImageId())));
+              testing::ElementsAre(std::make_pair(images[3].ImageId(),
+                                                  images[4].ImageId())));
   EXPECT_TRUE(generator.Next().empty());
   EXPECT_TRUE(generator.HasFinished());
 }
@@ -211,7 +212,7 @@ TEST(SequentialPairGenerator, LinearDefaultUsesVanillaPerImageBatching) {
   }
 }
 
-TEST(SequentialPairGenerator, LinearOverlapProvenance) {
+TEST(SequentialPairGenerator, LoopClosureFlagKeepsVanillaPairBatches) {
   constexpr int kNumImages = 5;
   auto database = Database::Open(kInMemorySqliteDatabasePath);
   CreateSyntheticDatabase(kNumImages, *database);
@@ -224,20 +225,14 @@ TEST(SequentialPairGenerator, LinearOverlapProvenance) {
   options.mark_non_consecutive_as_lc = true;
   SequentialPairGenerator generator(options, database);
 
-  const auto direct_pairs = generator.NextWithProvenance();
-  ASSERT_EQ(direct_pairs.size(), 4);
-  for (size_t i = 0; i < direct_pairs.size(); ++i) {
-    EXPECT_EQ(direct_pairs[i].image_id1, images[i].ImageId());
-    EXPECT_EQ(direct_pairs[i].image_id2, images[i + 1].ImageId());
-    EXPECT_FALSE(direct_pairs[i].is_loop_closure);
-  }
-
-  const auto extended_pairs = generator.NextWithProvenance();
-  ASSERT_EQ(extended_pairs.size(), 3);
-  for (size_t i = 0; i < extended_pairs.size(); ++i) {
-    EXPECT_EQ(extended_pairs[i].image_id1, images[i].ImageId());
-    EXPECT_EQ(extended_pairs[i].image_id2, images[i + 2].ImageId());
-    EXPECT_TRUE(extended_pairs[i].is_loop_closure);
+  const auto pairs = generator.NextWithProvenance();
+  EXPECT_THAT(ImagePairsWithoutProvenance(pairs),
+              testing::ElementsAre(
+                  std::make_pair(images[0].ImageId(), images[1].ImageId()),
+                  std::make_pair(images[0].ImageId(), images[2].ImageId()),
+                  std::make_pair(images[0].ImageId(), images[3].ImageId())));
+  for (const FeatureMatcherImagePair& pair : pairs) {
+    EXPECT_FALSE(pair.is_loop_closure);
   }
 }
 
@@ -329,17 +324,19 @@ TEST(SequentialPairGenerator, Quadratic) {
   EXPECT_THAT(generator.Next(),
               testing::ElementsAre(
                   std::make_pair(images[0].ImageId(), images[1].ImageId()),
-                  std::make_pair(images[1].ImageId(), images[2].ImageId()),
-                  std::make_pair(images[2].ImageId(), images[3].ImageId()),
-                  std::make_pair(images[3].ImageId(), images[4].ImageId())));
+                  std::make_pair(images[0].ImageId(), images[2].ImageId()),
+                  std::make_pair(images[0].ImageId(), images[4].ImageId())));
   EXPECT_THAT(generator.Next(),
               testing::ElementsAre(
-                  std::make_pair(images[0].ImageId(), images[2].ImageId()),
-                  std::make_pair(images[1].ImageId(), images[3].ImageId()),
+                  std::make_pair(images[1].ImageId(), images[2].ImageId()),
+                  std::make_pair(images[1].ImageId(), images[3].ImageId())));
+  EXPECT_THAT(generator.Next(),
+              testing::ElementsAre(
+                  std::make_pair(images[2].ImageId(), images[3].ImageId()),
                   std::make_pair(images[2].ImageId(), images[4].ImageId())));
   EXPECT_THAT(generator.Next(),
-              testing::ElementsAre(
-                  std::make_pair(images[0].ImageId(), images[4].ImageId())));
+              testing::ElementsAre(std::make_pair(images[3].ImageId(),
+                                                  images[4].ImageId())));
   EXPECT_TRUE(generator.Next().empty());
   EXPECT_TRUE(generator.HasFinished());
 }

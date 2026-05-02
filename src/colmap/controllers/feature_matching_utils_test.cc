@@ -103,6 +103,14 @@ std::pair<image_t, image_t> ConsecutiveImagePair(Database& database) {
   return {images[0].ImageId(), images[1].ImageId()};
 }
 
+std::vector<Image> OrderedImages(Database& database) {
+  std::vector<Image> images = database.ReadAllImages();
+  std::sort(images.begin(), images.end(), [](const Image& a, const Image& b) {
+    return a.Name() < b.Name();
+  });
+  return images;
+}
+
 // Match pairs without geometric verification, then clear TVGs.
 // Leaves matches in the database ready for a GeometricVerifierController.
 void MatchPairsWithoutVerification(
@@ -159,6 +167,159 @@ TEST(MergeLoopClosureInlierMatches, CollidingCandidatesDoNotBecomeLcRows) {
   EXPECT_EQ(merged_matches[0], FeatureMatch(1, 10));
   EXPECT_EQ(merged_matches[1], FeatureMatch(2, 20));
   EXPECT_EQ(merged_matches_are_lc, std::vector<bool>({false, false}));
+}
+
+TEST(DeriveSequentialLoopClosureProvenance,
+     MergesTransitiveAndCandidateRows) {
+  auto data = CreateTestData(3);
+  const std::vector<Image> images = OrderedImages(*data.database);
+  ASSERT_GE(images.size(), 3);
+  const image_t image_id1 = images[0].ImageId();
+  const image_t image_id2 = images[1].ImageId();
+  const image_t image_id3 = images[2].ImageId();
+
+  data.database->ClearTwoViewGeometries();
+
+  TwoViewGeometry tvg12;
+  tvg12.inlier_matches = {{0, 0}};
+  data.cache->WriteTwoViewGeometry(image_id1, image_id2, tvg12);
+
+  TwoViewGeometry tvg23;
+  tvg23.inlier_matches = {{0, 0}};
+  data.cache->WriteTwoViewGeometry(image_id2, image_id3, tvg23);
+
+  TwoViewGeometry tvg13;
+  tvg13.inlier_matches = {{0, 0}, {1, 1}};
+  data.cache->WriteTwoViewGeometry(image_id1, image_id3, tvg13);
+
+  SequentialPairingOptions options;
+  options.overlap = 2;
+  options.quadratic_overlap = false;
+  options.mark_non_consecutive_as_lc = true;
+  DeriveSequentialLoopClosureProvenance(data.cache, options);
+
+  const TwoViewGeometry direct12 =
+      data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  EXPECT_FALSE(direct12.is_loop_closure);
+  EXPECT_TRUE(direct12.inlier_matches_are_lc.empty());
+
+  const TwoViewGeometry direct23 =
+      data.database->ReadTwoViewGeometry(image_id2, image_id3);
+  EXPECT_FALSE(direct23.is_loop_closure);
+  EXPECT_TRUE(direct23.inlier_matches_are_lc.empty());
+
+  const TwoViewGeometry derived13 =
+      data.database->ReadTwoViewGeometry(image_id1, image_id3);
+  ASSERT_EQ(derived13.inlier_matches.size(), 2);
+  ASSERT_EQ(derived13.inlier_matches_are_lc.size(), 2);
+  EXPECT_EQ(derived13.inlier_matches[0], FeatureMatch(0, 0));
+  EXPECT_EQ(derived13.inlier_matches[1], FeatureMatch(1, 1));
+  EXPECT_FALSE(derived13.inlier_matches_are_lc[0]);
+  EXPECT_TRUE(derived13.inlier_matches_are_lc[1]);
+  EXPECT_TRUE(derived13.is_loop_closure);
+}
+
+TEST(DeriveSequentialLoopClosureProvenance,
+     DoesNotMarkPairsOutsideSequentialOverlapUnlessLoopDetectionIsLc) {
+  auto data = CreateTestData(4);
+  const std::vector<Image> images = OrderedImages(*data.database);
+  ASSERT_GE(images.size(), 4);
+  const image_t image_id1 = images[0].ImageId();
+  const image_t image_id2 = images[1].ImageId();
+  const image_t image_id3 = images[2].ImageId();
+  const image_t image_id4 = images[3].ImageId();
+
+  data.database->ClearTwoViewGeometries();
+
+  TwoViewGeometry tvg12;
+  tvg12.inlier_matches = {{0, 0}};
+  data.cache->WriteTwoViewGeometry(image_id1, image_id2, tvg12);
+
+  TwoViewGeometry tvg23;
+  tvg23.inlier_matches = {{0, 0}};
+  data.cache->WriteTwoViewGeometry(image_id2, image_id3, tvg23);
+
+  TwoViewGeometry tvg34;
+  tvg34.inlier_matches = {{0, 0}};
+  data.cache->WriteTwoViewGeometry(image_id3, image_id4, tvg34);
+
+  TwoViewGeometry tvg14;
+  tvg14.inlier_matches = {{0, 0}, {1, 1}};
+  tvg14.is_loop_closure = true;
+  data.cache->WriteTwoViewGeometry(image_id1, image_id4, tvg14);
+
+  SequentialPairingOptions options;
+  options.overlap = 2;
+  options.quadratic_overlap = false;
+  options.mark_non_consecutive_as_lc = true;
+  options.mark_loop_detection_as_lc = false;
+  DeriveSequentialLoopClosureProvenance(data.cache, options);
+
+  const TwoViewGeometry not_lc =
+      data.database->ReadTwoViewGeometry(image_id1, image_id4);
+  EXPECT_FALSE(not_lc.is_loop_closure);
+  EXPECT_TRUE(not_lc.inlier_matches_are_lc.empty());
+
+  options.mark_loop_detection_as_lc = true;
+  DeriveSequentialLoopClosureProvenance(data.cache, options);
+
+  const TwoViewGeometry lc =
+      data.database->ReadTwoViewGeometry(image_id1, image_id4);
+  EXPECT_EQ(lc.inlier_matches_are_lc.size(), lc.inlier_matches.size());
+  EXPECT_TRUE(lc.is_loop_closure);
+}
+
+TEST(DeriveSequentialLoopClosureProvenance, KeepsRigFramePairsNonLc) {
+  const auto test_dir = CreateTestDir();
+  const auto database_path = test_dir / "database.db";
+  auto database = Database::Open(database_path);
+
+  Reconstruction reconstruction;
+  SyntheticDatasetOptions synthetic_dataset_options;
+  synthetic_dataset_options.num_rigs = 1;
+  synthetic_dataset_options.num_cameras_per_rig = 2;
+  synthetic_dataset_options.num_frames_per_rig = 2;
+  synthetic_dataset_options.num_points3D = 5;
+  SynthesizeDataset(
+      synthetic_dataset_options, &reconstruction, database.get());
+
+  auto cache = std::make_shared<FeatureMatcherCache>(100, database);
+  const std::vector<Image> images = OrderedImages(*database);
+  ASSERT_EQ(images.size(), 4);
+
+  const auto write_lc_tvg = [&](const image_t image_id1,
+                                const image_t image_id2) {
+    TwoViewGeometry tvg;
+    tvg.inlier_matches = {{0, 0}};
+    tvg.inlier_matches_are_lc = {true};
+    tvg.is_loop_closure = true;
+    cache->WriteTwoViewGeometry(image_id1, image_id2, tvg);
+  };
+
+  database->ClearTwoViewGeometries();
+  const image_t same_frame_image1 = images[0].ImageId();
+  const image_t same_frame_image2 = images[1].ImageId();
+  const image_t adjacent_frame_image1 = images[0].ImageId();
+  const image_t adjacent_frame_image2 = images[2].ImageId();
+  write_lc_tvg(same_frame_image1, same_frame_image2);
+  write_lc_tvg(adjacent_frame_image1, adjacent_frame_image2);
+
+  SequentialPairingOptions options;
+  options.overlap = 1;
+  options.quadratic_overlap = false;
+  options.mark_non_consecutive_as_lc = true;
+  DeriveSequentialLoopClosureProvenance(cache, options);
+
+  const TwoViewGeometry same_frame_tvg =
+      database->ReadTwoViewGeometry(same_frame_image1, same_frame_image2);
+  EXPECT_FALSE(same_frame_tvg.is_loop_closure);
+  EXPECT_TRUE(same_frame_tvg.inlier_matches_are_lc.empty());
+
+  const TwoViewGeometry adjacent_frame_tvg =
+      database->ReadTwoViewGeometry(adjacent_frame_image1,
+                                    adjacent_frame_image2);
+  EXPECT_FALSE(adjacent_frame_tvg.is_loop_closure);
+  EXPECT_TRUE(adjacent_frame_tvg.inlier_matches_are_lc.empty());
 }
 
 TEST(FeatureMatcherController, MatchEmptyPairs) {
