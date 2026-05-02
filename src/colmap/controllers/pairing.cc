@@ -131,7 +131,6 @@ VocabTreePairingOptions SequentialPairingOptions::VocabTreeOptions() const {
       loop_detection_num_images_after_verification;
   options.max_num_features = loop_detection_max_num_features;
   options.vocab_tree_path = vocab_tree_path;
-  options.mark_matches_as_lc = mark_loop_detection_as_lc;
   options.num_threads = num_threads;
   return options;
 }
@@ -158,28 +157,6 @@ bool ImportedPairingOptions::Check() const {
 
 bool FeaturePairsMatchingOptions::Check() const { return true; }
 
-std::vector<FeatureMatcherImagePair> FeatureMatcherImagePairs(
-    const std::vector<std::pair<image_t, image_t>>& image_pairs,
-    bool mark_as_loop_closure) {
-  std::vector<FeatureMatcherImagePair> image_pairs_with_provenance;
-  image_pairs_with_provenance.reserve(image_pairs.size());
-  for (const auto& [image_id1, image_id2] : image_pairs) {
-    image_pairs_with_provenance.push_back(
-        {image_id1, image_id2, mark_as_loop_closure});
-  }
-  return image_pairs_with_provenance;
-}
-
-std::vector<std::pair<image_t, image_t>> ImagePairsWithoutProvenance(
-    const std::vector<FeatureMatcherImagePair>& image_pairs) {
-  std::vector<std::pair<image_t, image_t>> pairs;
-  pairs.reserve(image_pairs.size());
-  for (const auto& image_pair : image_pairs) {
-    pairs.emplace_back(image_pair.image_id1, image_pair.image_id2);
-  }
-  return pairs;
-}
-
 std::vector<std::pair<image_t, image_t>> PairGenerator::AllPairs() {
   std::vector<std::pair<image_t, image_t>> image_pairs;
   while (!this->HasFinished()) {
@@ -189,10 +166,6 @@ std::vector<std::pair<image_t, image_t>> PairGenerator::AllPairs() {
                        std::make_move_iterator(image_pairs_block.end()));
   }
   return image_pairs;
-}
-
-std::vector<FeatureMatcherImagePair> PairGenerator::NextWithProvenance() {
-  return FeatureMatcherImagePairs(Next());
 }
 
 ExhaustivePairGenerator::ExhaustivePairGenerator(
@@ -377,11 +350,6 @@ std::vector<std::pair<image_t, image_t>> VocabTreePairGenerator::Next() {
   return image_pairs_;
 }
 
-std::vector<FeatureMatcherImagePair>
-VocabTreePairGenerator::NextWithProvenance() {
-  return FeatureMatcherImagePairs(Next(), options_.mark_matches_as_lc);
-}
-
 void VocabTreePairGenerator::IndexImages(
     const std::vector<image_t>& image_ids) {
   retrieval::VisualIndex::IndexOptions index_options;
@@ -495,87 +463,69 @@ bool SequentialPairGenerator::HasFinished() const {
 }
 
 std::vector<std::pair<image_t, image_t>> SequentialPairGenerator::Next() {
-  image_pairs_ = NextSequentialPairs();
-  if (image_pairs_.empty() && vocab_tree_pair_generator_) {
-    image_pairs_ = vocab_tree_pair_generator_->Next();
-  }
-  return image_pairs_;
-}
-
-std::vector<FeatureMatcherImagePair>
-SequentialPairGenerator::NextWithProvenance() {
-  image_pairs_ = NextSequentialPairs();
-  if (!image_pairs_.empty()) {
-    return FeatureMatcherImagePairs(image_pairs_);
-  }
-  if (vocab_tree_pair_generator_) {
-    return vocab_tree_pair_generator_->NextWithProvenance();
-  }
-  return {};
-}
-
-std::vector<std::pair<image_t, image_t>>
-SequentialPairGenerator::NextSequentialPairs() {
   image_pairs_.clear();
-  if (image_idx_ < image_ids_.size()) {
-    LOG(INFO) << StringPrintf(
-        "Processing image [%d/%d]", image_idx_ + 1, image_ids_.size());
+  if (image_idx_ >= image_ids_.size()) {
+    if (vocab_tree_pair_generator_) {
+      return vocab_tree_pair_generator_->Next();
+    }
+    return image_pairs_;
+  }
+  LOG(INFO) << StringPrintf(
+      "Processing image [%d/%d]", image_idx_ + 1, image_ids_.size());
 
-    const auto image_id1 = image_ids_.at(image_idx_);
+  const auto image_id1 = image_ids_.at(image_idx_);
 
-    // If image is part of a rig, then pair the other images in the same frame.
-    if (options_.expand_rig_images) {
-      if (const auto frame_id1_it = image_to_frame_ids_.find(image_id1);
-          frame_id1_it != image_to_frame_ids_.end()) {
-        for (const image_t frame_image_id2 :
-             frame_to_image_ids_.at(frame_id1_it->second)) {
-          if (image_id1 != frame_image_id2) {
-            image_pairs_.emplace_back(image_id1, frame_image_id2);
-          }
+  // If image is part of a rig, then pair the other images in the same frame.
+  if (options_.expand_rig_images) {
+    if (const auto frame_id1_it = image_to_frame_ids_.find(image_id1);
+        frame_id1_it != image_to_frame_ids_.end()) {
+      for (const image_t frame_image_id2 :
+           frame_to_image_ids_.at(frame_id1_it->second)) {
+        if (image_id1 != frame_image_id2) {
+          image_pairs_.emplace_back(image_id1, frame_image_id2);
         }
       }
     }
-
-    auto MaybeExpandRigImages = [this](image_t image_id1, image_t image_id2) {
-      if (!options_.expand_rig_images) {
-        return;
-      }
-      const auto frame_id2_it = image_to_frame_ids_.find(image_id2);
-      if (frame_id2_it != image_to_frame_ids_.end()) {
-        // Pair with all images in second frame.
-        for (const image_t frame_image_id2 :
-             frame_to_image_ids_.at(frame_id2_it->second)) {
-          if (image_id1 != frame_image_id2 && image_id2 != frame_image_id2) {
-            image_pairs_.emplace_back(image_id1, frame_image_id2);
-          }
-        }
-      }
-    };
-
-    for (int i = 0; i < options_.overlap; ++i) {
-      if (options_.quadratic_overlap) {
-        const size_t image_idx_2_quadratic = image_idx_ + (1ull << i);
-        if (image_idx_2_quadratic < image_ids_.size()) {
-          const image_t image_id2 = image_ids_.at(image_idx_2_quadratic);
-          image_pairs_.emplace_back(image_id1, image_id2);
-          MaybeExpandRigImages(image_id1, image_id2);
-        } else {
-          break;
-        }
-      } else {
-        const size_t image_idx_2 = image_idx_ + i + 1;
-        if (image_idx_2 < image_ids_.size()) {
-          const image_t image_id2 = image_ids_.at(image_idx_2);
-          image_pairs_.emplace_back(image_id1, image_id2);
-          MaybeExpandRigImages(image_id1, image_id2);
-        } else {
-          break;
-        }
-      }
-    }
-    ++image_idx_;
   }
 
+  auto MaybeExpandRigImages = [this](image_t image_id1, image_t image_id2) {
+    if (!options_.expand_rig_images) {
+      return;
+    }
+    const auto frame_id2_it = image_to_frame_ids_.find(image_id2);
+    if (frame_id2_it != image_to_frame_ids_.end()) {
+      // Pair with all images in second frame.
+      for (const image_t frame_image_id2 :
+           frame_to_image_ids_.at(frame_id2_it->second)) {
+        if (image_id1 != frame_image_id2 && image_id2 != frame_image_id2) {
+          image_pairs_.emplace_back(image_id1, frame_image_id2);
+        }
+      }
+    }
+  };
+
+  for (int i = 0; i < options_.overlap; ++i) {
+    if (options_.quadratic_overlap) {
+      const size_t image_idx_2_quadratic = image_idx_ + (1ull << i);
+      if (image_idx_2_quadratic < image_ids_.size()) {
+        const image_t image_id2 = image_ids_.at(image_idx_2_quadratic);
+        image_pairs_.emplace_back(image_id1, image_id2);
+        MaybeExpandRigImages(image_id1, image_id2);
+      } else {
+        break;
+      }
+    } else {
+      const size_t image_idx_2 = image_idx_ + i + 1;
+      if (image_idx_2 < image_ids_.size()) {
+        const image_t image_id2 = image_ids_.at(image_idx_2);
+        image_pairs_.emplace_back(image_id1, image_id2);
+        MaybeExpandRigImages(image_id1, image_id2);
+      } else {
+        break;
+      }
+    }
+  }
+  ++image_idx_;
   return image_pairs_;
 }
 

@@ -38,27 +38,10 @@
 #include "colmap/util/misc.h"
 #include "colmap/util/timer.h"
 
-#include <algorithm>
 #include <fstream>
-#include <type_traits>
-#include <unordered_map>
 
 namespace colmap {
 namespace {
-
-template <typename PairingOptions>
-std::function<void()> MaybeMakeSequentialLcPostprocessor(
-    const PairingOptions& options,
-    const std::shared_ptr<FeatureMatcherCache>& cache) {
-  if constexpr (std::is_same_v<PairingOptions, SequentialPairingOptions>) {
-    if (options.mark_non_consecutive_as_lc) {
-      return [options, cache]() {
-        DeriveSequentialLoopClosureProvenance(cache, options);
-      };
-    }
-  }
-  return nullptr;
-}
 
 void RigVerification(const std::shared_ptr<Database>& database,
                      const std::shared_ptr<FeatureMatcherCache>& cache,
@@ -160,15 +143,8 @@ void RigVerification(const std::shared_ptr<Database>& database,
            EstimateRigTwoViewGeometries(
                rig1, rig2, images, cameras, matches, geometry_options)) {
         const auto& [image_id1, image_id2] = image_pair;
-        TwoViewGeometry preserved_two_view_geometry = two_view_geometry;
-        if (cache->ExistsTwoViewGeometry(image_id1, image_id2)) {
-          PreserveInlierLoopClosureProvenance(
-              cache->GetTwoViewGeometry(image_id1, image_id2),
-              &preserved_two_view_geometry);
-        }
         cache->DeleteTwoViewGeometry(image_id1, image_id2);
-        cache->WriteTwoViewGeometry(
-            image_id1, image_id2, preserved_two_view_geometry);
+        cache->WriteTwoViewGeometry(image_id1, image_id2, two_view_geometry);
       }
     });
   }
@@ -192,7 +168,6 @@ class FeatureMatcherThread : public Thread {
         geometry_options,
         database,
         cache,
-        MaybeMakeSequentialLcPostprocessor(pairing_options, cache),
         [pairing_options, cache]() {
           return std::make_unique<PairGeneratorType>(pairing_options, cache);
         });
@@ -204,13 +179,11 @@ class FeatureMatcherThread : public Thread {
                        const TwoViewGeometryOptions& geometry_options,
                        std::shared_ptr<Database> database,
                        std::shared_ptr<FeatureMatcherCache> cache,
-                       std::function<void()> sequential_lc_postprocess_fn,
                        PairGeneratorFactory pair_generator_factory)
       : matching_options_(matching_options),
         geometry_options_(geometry_options),
         database_(std::move(database)),
         cache_(std::move(cache)),
-        sequential_lc_postprocess_fn_(std::move(sequential_lc_postprocess_fn)),
         pair_generator_factory_(std::move(pair_generator_factory)),
         matcher_(matching_options, geometry_options, cache_) {
     THROW_CHECK(matching_options.Check());
@@ -238,15 +211,9 @@ class FeatureMatcherThread : public Thread {
       }
       Timer timer;
       timer.Start();
-      if (sequential_lc_postprocess_fn_) {
-        const std::vector<std::pair<image_t, image_t>> image_pairs =
-            pair_generator->Next();
-        matcher_.Match(image_pairs);
-      } else {
-        const std::vector<FeatureMatcherImagePair> image_pairs =
-            pair_generator->NextWithProvenance();
-        matcher_.MatchWithProvenance(image_pairs);
-      }
+      const std::vector<std::pair<image_t, image_t>> image_pairs =
+          pair_generator->Next();
+      matcher_.Match(image_pairs);
       LOG(INFO) << StringPrintf("in %.3fs", timer.ElapsedSeconds());
     }
 
@@ -264,20 +231,12 @@ class FeatureMatcherThread : public Thread {
           database_, cache_, geometry_options_, matching_options_.num_threads);
       run_timer.PrintMinutes();
     }
-
-    if (sequential_lc_postprocess_fn_) {
-      run_timer.Restart();
-      LOG_HEADING1("Deriving sequential loop-closure provenance");
-      sequential_lc_postprocess_fn_();
-      run_timer.PrintMinutes();
-    }
   }
 
   const FeatureMatchingOptions matching_options_;
   const TwoViewGeometryOptions geometry_options_;
   const std::shared_ptr<Database> database_;
   const std::shared_ptr<FeatureMatcherCache> cache_;
-  const std::function<void()> sequential_lc_postprocess_fn_;
   const PairGeneratorFactory pair_generator_factory_;
   FeatureMatcherController matcher_;
 };
@@ -298,7 +257,6 @@ class GeometricVerifierThread : public Thread {
         geometry_options,
         database,
         cache,
-        MaybeMakeSequentialLcPostprocessor(pairing_options, cache),
         [pairing_options, cache]() {
           return std::make_unique<PairGeneratorType>(pairing_options, cache);
         });
@@ -310,13 +268,10 @@ class GeometricVerifierThread : public Thread {
                           const TwoViewGeometryOptions& geometry_options,
                           std::shared_ptr<Database> database,
                           std::shared_ptr<FeatureMatcherCache> cache,
-                          std::function<void()>
-                              sequential_lc_postprocess_fn,
                           PairGeneratorFactory pair_generator_factory)
       : geometry_options_(geometry_options),
         database_(std::move(database)),
         cache_(std::move(cache)),
-        sequential_lc_postprocess_fn_(std::move(sequential_lc_postprocess_fn)),
         pair_generator_factory_(std::move(pair_generator_factory)),
         verifier_(verifier_options, geometry_options, cache_) {
     THROW_CHECK(geometry_options.Check());
@@ -343,15 +298,9 @@ class GeometricVerifierThread : public Thread {
       }
       Timer timer;
       timer.Start();
-      if (sequential_lc_postprocess_fn_) {
-        const std::vector<std::pair<image_t, image_t>> image_pairs =
-            pair_generator->Next();
-        verifier_.Verify(image_pairs);
-      } else {
-        const std::vector<FeatureMatcherImagePair> image_pairs =
-            pair_generator->NextWithProvenance();
-        verifier_.VerifyWithProvenance(image_pairs);
-      }
+      const std::vector<std::pair<image_t, image_t>> image_pairs =
+          pair_generator->Next();
+      verifier_.Verify(image_pairs);
       LOG(INFO) << StringPrintf("in %.3fs", timer.ElapsedSeconds());
     }
 
@@ -365,20 +314,12 @@ class GeometricVerifierThread : public Thread {
       run_timer.PrintMinutes();
     }
 
-    if (sequential_lc_postprocess_fn_) {
-      run_timer.Restart();
-      LOG_HEADING1("Deriving sequential loop-closure provenance");
-      sequential_lc_postprocess_fn_();
-      run_timer.PrintMinutes();
-    }
-
     run_timer.PrintMinutes();
   }
 
   const TwoViewGeometryOptions geometry_options_;
   const std::shared_ptr<Database> database_;
   const std::shared_ptr<FeatureMatcherCache> cache_;
-  const std::function<void()> sequential_lc_postprocess_fn_;
   const PairGeneratorFactory pair_generator_factory_;
   GeometricVerifierController verifier_;
 };

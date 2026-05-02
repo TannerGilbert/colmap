@@ -9,9 +9,6 @@ def test_lc_provenance_defaults() -> None:
     assert not sequential_options.mark_loop_detection_as_lc
     assert not sequential_options.mark_non_consecutive_as_lc
 
-    vocab_tree_options = pycolmap.VocabTreePairingOptions()
-    assert not vocab_tree_options.mark_matches_as_lc
-
     global_positioner_options = pycolmap.GlobalPositionerOptions()
     assert not global_positioner_options.use_lc_observations
 
@@ -26,10 +23,6 @@ def test_lc_provenance_bindings_roundtrip(tmp_path: Path) -> None:
     sequential_options.mark_non_consecutive_as_lc = True
     assert sequential_options.mark_loop_detection_as_lc
     assert sequential_options.mark_non_consecutive_as_lc
-
-    vocab_tree_options = pycolmap.VocabTreePairingOptions()
-    vocab_tree_options.mark_matches_as_lc = True
-    assert vocab_tree_options.mark_matches_as_lc
 
     two_view_geometry = pycolmap.TwoViewGeometry()
     assert not two_view_geometry.is_loop_closure

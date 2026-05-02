@@ -30,6 +30,7 @@
 #include "colmap/ui/feature_matching_widget.h"
 
 #include "colmap/controllers/feature_matching.h"
+#include "colmap/controllers/sequential_loop_closure.h"
 #include "colmap/feature/sift.h"
 #ifdef COLMAP_ONNX_ENABLED
 #include "colmap/feature/aliked.h"
@@ -37,8 +38,11 @@
 #include "colmap/ui/options_widget.h"
 #include "colmap/ui/thread_control_widget.h"
 #include "colmap/util/file.h"
+#include "colmap/util/threading.h"
 
 #include <filesystem>
+#include <memory>
+#include <utility>
 
 namespace colmap {
 
@@ -74,6 +78,47 @@ class SequentialMatchingTab : public FeatureMatchingTab {
  public:
   SequentialMatchingTab(QWidget* parent, OptionManager* options);
   void Run() override;
+};
+
+class SequentialFeatureMatchingThread : public Thread {
+ public:
+  SequentialFeatureMatchingThread(SequentialPairingOptions pairing_options,
+                                  FeatureMatchingOptions matching_options,
+                                  TwoViewGeometryOptions geometry_options,
+                                  std::filesystem::path database_path)
+      : pairing_options_(std::move(pairing_options)),
+        matching_options_(std::move(matching_options)),
+        geometry_options_(std::move(geometry_options)),
+        database_path_(std::move(database_path)) {}
+
+  void Stop() override {
+    Thread::Stop();
+    if (matcher_) {
+      matcher_->Stop();
+    }
+  }
+
+ private:
+  void Run() override {
+    matcher_ = CreateSequentialFeatureMatcher(
+        pairing_options_, matching_options_, geometry_options_, database_path_);
+    if (IsStopped()) {
+      matcher_->Stop();
+      return;
+    }
+    matcher_->Start();
+    matcher_->Wait();
+    if (!IsStopped()) {
+      DeriveSequentialLoopClosureProvenance(
+          database_path_, pairing_options_, [this]() { return IsStopped(); });
+    }
+  }
+
+  const SequentialPairingOptions pairing_options_;
+  const FeatureMatchingOptions matching_options_;
+  const TwoViewGeometryOptions geometry_options_;
+  const std::filesystem::path database_path_;
+  std::unique_ptr<Thread> matcher_;
 };
 
 class VocabTreeMatchingTab : public FeatureMatchingTab {
@@ -290,11 +335,14 @@ void SequentialMatchingTab::Run() {
     return;
   }
 
-  auto matcher = CreateSequentialFeatureMatcher(*options_->sequential_pairing,
-                                                *options_->feature_matching,
-                                                *options_->two_view_geometry,
-                                                *options_->database_path);
-  thread_control_widget_->StartThread("Matching...", true, std::move(matcher));
+  thread_control_widget_->StartThread(
+      "Matching...",
+      true,
+      std::make_unique<SequentialFeatureMatchingThread>(
+          *options_->sequential_pairing,
+          *options_->feature_matching,
+          *options_->two_view_geometry,
+          *options_->database_path));
 }
 
 VocabTreeMatchingTab::VocabTreeMatchingTab(QWidget* parent,
@@ -313,8 +361,6 @@ VocabTreeMatchingTab::VocabTreeMatchingTab(QWidget* parent,
       0);
   options_widget_->AddOptionInt(
       &options_->vocab_tree_pairing->max_num_features, "max_num_features", -1);
-  options_widget_->AddOptionBool(
-      &options_->vocab_tree_pairing->mark_matches_as_lc, "mark_matches_as_lc");
   options_widget_->AddOptionFilePath(
       &options_->vocab_tree_pairing->vocab_tree_path, "vocab_tree_path");
 

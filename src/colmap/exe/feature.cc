@@ -33,6 +33,7 @@
 #include "colmap/controllers/feature_matching.h"
 #include "colmap/controllers/image_reader.h"
 #include "colmap/controllers/option_manager.h"
+#include "colmap/controllers/sequential_loop_closure.h"
 #include "colmap/exe/gui.h"
 #include "colmap/feature/sift.h"
 #include "colmap/sensor/models.h"
@@ -299,6 +300,8 @@ int RunSequentialMatcher(int argc, char** argv) {
     matcher->Start();
     matcher->Wait();
   }
+  DeriveSequentialLoopClosureProvenance(*options.database_path,
+                                        *options.sequential_pairing);
 
   return EXIT_SUCCESS;
 }

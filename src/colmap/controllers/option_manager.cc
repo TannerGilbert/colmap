@@ -438,8 +438,6 @@ void OptionManager::AddVocabTreePairingOptions() {
                    &vocab_tree_pairing->vocab_tree_path);
   AddDefaultOption("VocabTreeMatching.match_list_path",
                    &vocab_tree_pairing->match_list_path);
-  AddDefaultOption("VocabTreeMatching.mark_matches_as_lc",
-                   &vocab_tree_pairing->mark_matches_as_lc);
   AddDefaultOption("VocabTreeMatching.num_threads",
                    &vocab_tree_pairing->num_threads);
 }
@@ -736,8 +734,9 @@ void OptionManager::AddGlobalMapperOptions() {
                    &global_mapper->mapper.global_positioning.optimize_points);
   AddDefaultOption("GlobalMapper.gp_optimize_scales",
                    &global_mapper->mapper.global_positioning.optimize_scales);
-  AddDefaultOption("GlobalMapper.gp_loss_function_scale",
-                   &global_mapper->mapper.global_positioning.loss.scale);
+  AddDefaultOption(
+      "GlobalMapper.gp_loss_function_scale",
+      &global_mapper->mapper.global_positioning.loss.scale);
   AddDefaultOption(
       "GlobalMapper.gp_use_lc_observations",
       &global_mapper->mapper.global_positioning.use_lc_observations);
@@ -770,8 +769,9 @@ void OptionManager::AddGlobalMapperOptions() {
                    &global_mapper->mapper.bundle_adjustment.ceres->use_gpu);
   AddDefaultOption("GlobalMapper.ba_ceres_gpu_index",
                    &global_mapper->mapper.bundle_adjustment.ceres->gpu_index);
-  AddDefaultOption("GlobalMapper.ba_ceres_loss_function_scale",
-                   &global_mapper->mapper.bundle_adjustment.ceres->loss.scale);
+  AddDefaultOption(
+      "GlobalMapper.ba_ceres_loss_function_scale",
+      &global_mapper->mapper.bundle_adjustment.ceres->loss.scale);
   AddDefaultOption("GlobalMapper.ba_ceres_max_num_iterations",
                    &global_mapper->mapper.bundle_adjustment.ceres
                         ->solver_options.max_num_iterations);

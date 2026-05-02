@@ -34,10 +34,7 @@
 #include "colmap/scene/synthetic.h"
 #include "colmap/util/testing.h"
 
-#include <algorithm>
 #include <fstream>
-#include <map>
-#include <unordered_map>
 
 #include <gtest/gtest.h>
 
@@ -66,21 +63,6 @@ std::unique_ptr<retrieval::VisualIndex> CreateSyntheticVisualIndex() {
       FeatureDescriptorsFloat(FeatureExtractorType::SIFT,
                               FeatureDescriptorsFloatData::Random(50, 128)));
   return visual_index;
-}
-
-bool IsAdjacentByName(Database& database, image_t image_id1, image_t image_id2) {
-  std::vector<Image> images = database.ReadAllImages();
-  std::sort(images.begin(), images.end(), [](const Image& a, const Image& b) {
-    return a.Name() < b.Name();
-  });
-  std::unordered_map<image_t, size_t> image_id_to_idx;
-  image_id_to_idx.reserve(images.size());
-  for (size_t idx = 0; idx < images.size(); ++idx) {
-    image_id_to_idx.emplace(images[idx].ImageId(), idx);
-  }
-  const size_t idx1 = image_id_to_idx.at(image_id1);
-  const size_t idx2 = image_id_to_idx.at(image_id2);
-  return std::max(idx1, idx2) - std::min(idx1, idx2) == 1;
 }
 
 TEST(CreateExhaustiveFeatureMatcher, Nominal) {
@@ -142,55 +124,6 @@ TEST(CreateVocabTreeFeatureMatcher, Nominal) {
   EXPECT_GE(database->ReadTwoViewGeometries().size(), 4);
 }
 
-TEST(CreateVocabTreeFeatureMatcher, MarksMatchesAsLoopClosure) {
-  const auto test_dir = CreateTestDir();
-  const auto database_path = test_dir / "database.db";
-  const auto vocab_tree_path = test_dir / "vocab_tree.bin";
-
-  auto database = Database::Open(database_path);
-  CreateTestDatabase(/*num_images=*/4, *database);
-  database->ClearMatches();
-  database->ClearTwoViewGeometries();
-
-  // Create vocab tree
-  CreateSyntheticVisualIndex()->Write(vocab_tree_path);
-
-  VocabTreePairingOptions pairing_options;
-  pairing_options.vocab_tree_path = vocab_tree_path;
-  pairing_options.num_images = 2;
-  pairing_options.mark_matches_as_lc = true;
-
-  FeatureMatchingOptions matching_options;
-  matching_options.use_gpu = false;
-  matching_options.num_threads = 1;
-
-  TwoViewGeometryOptions geometry_options;
-
-  auto matcher = CreateVocabTreeFeatureMatcher(
-      pairing_options, matching_options, geometry_options, database_path);
-  ASSERT_NE(matcher, nullptr);
-  matcher->Start();
-  matcher->Wait();
-
-  const auto two_view_geometries = database->ReadTwoViewGeometries();
-  ASSERT_GE(two_view_geometries.size(), 4);
-  bool saw_lc_pair = false;
-  bool saw_direct_pair = false;
-  for (const auto& [pair_id, two_view_geometry] : two_view_geometries) {
-    const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
-    if (IsAdjacentByName(*database, image_id1, image_id2)) {
-      saw_direct_pair = true;
-      EXPECT_FALSE(two_view_geometry.is_loop_closure);
-      EXPECT_TRUE(two_view_geometry.inlier_matches_are_lc.empty());
-    } else {
-      saw_lc_pair = true;
-      EXPECT_TRUE(two_view_geometry.is_loop_closure);
-    }
-  }
-  EXPECT_TRUE(saw_direct_pair);
-  EXPECT_TRUE(saw_lc_pair);
-}
-
 TEST(CreateSequentialFeatureMatcher, Nominal) {
   const auto test_dir = CreateTestDir();
   const auto database_path = test_dir / "database.db";
@@ -219,55 +152,6 @@ TEST(CreateSequentialFeatureMatcher, Nominal) {
   // (0,1), (0,2), (1,2), (1,3), (2,3), (2,4), (3,4)
   EXPECT_EQ(database->ReadAllMatches().size(), 7);
   EXPECT_EQ(database->ReadTwoViewGeometries().size(), 7);
-  const std::vector<Image> images = database->ReadAllImages();
-  ASSERT_GE(images.size(), 3);
-  EXPECT_FALSE(
-      database->ReadTwoViewGeometry(images[0].ImageId(), images[1].ImageId())
-          .is_loop_closure);
-  const auto transitive_pair =
-      database->ReadTwoViewGeometry(images[0].ImageId(), images[2].ImageId());
-  EXPECT_FALSE(transitive_pair.is_loop_closure);
-  EXPECT_TRUE(transitive_pair.inlier_matches_are_lc.empty());
-}
-
-TEST(CreateSequentialFeatureMatcher,
-     MarksNonConsecutivePairsAsLoopClosureCandidatesWhenEnabled) {
-  const auto test_dir = CreateTestDir();
-  const auto database_path = test_dir / "database.db";
-  auto database = Database::Open(database_path);
-  CreateTestDatabase(/*num_images=*/5, *database);
-  database->ClearMatches();
-  database->ClearTwoViewGeometries();
-
-  SequentialPairingOptions pairing_options;
-  pairing_options.overlap = 2;
-  pairing_options.quadratic_overlap = false;
-  pairing_options.mark_non_consecutive_as_lc = true;
-
-  FeatureMatchingOptions matching_options;
-  matching_options.use_gpu = false;
-  matching_options.num_threads = 1;
-
-  TwoViewGeometryOptions geometry_options;
-
-  auto matcher = CreateSequentialFeatureMatcher(
-      pairing_options, matching_options, geometry_options, database_path);
-  ASSERT_NE(matcher, nullptr);
-  matcher->Start();
-  matcher->Wait();
-
-  const std::vector<Image> images = database->ReadAllImages();
-  ASSERT_GE(images.size(), 3);
-  const auto direct_pair =
-      database->ReadTwoViewGeometry(images[0].ImageId(), images[1].ImageId());
-  EXPECT_FALSE(direct_pair.is_loop_closure);
-  EXPECT_TRUE(direct_pair.inlier_matches_are_lc.empty());
-
-  const auto extended_pair =
-      database->ReadTwoViewGeometry(images[0].ImageId(), images[2].ImageId());
-  ASSERT_FALSE(extended_pair.inlier_matches.empty());
-  EXPECT_EQ(extended_pair.inlier_matches_are_lc.size(),
-            extended_pair.inlier_matches.size());
 }
 
 TEST(CreateSpatialFeatureMatcher, Nominal) {
@@ -496,27 +380,6 @@ TEST(CreateGeometricVerifier, RigVerificationWithNonTrivialFrames) {
   synthetic_dataset_options.camera_has_prior_focal_length = true;
   SynthesizeDataset(synthetic_dataset_options, &reconstruction, database.get());
 
-  std::map<image_pair_t, std::map<std::pair<point2D_t, point2D_t>, bool>>
-      expected_lc_masks;
-  for (const auto& [pair_id, tvg] : database->ReadTwoViewGeometries()) {
-    const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
-    TwoViewGeometry mixed_lc_tvg = tvg;
-    mixed_lc_tvg.inlier_matches_are_lc.resize(
-        mixed_lc_tvg.inlier_matches.size());
-    auto& expected_mask = expected_lc_masks[pair_id];
-    for (size_t i = 0; i < mixed_lc_tvg.inlier_matches.size(); ++i) {
-      const bool is_lc = i % 3 == 0;
-      const FeatureMatch& match = mixed_lc_tvg.inlier_matches[i];
-      mixed_lc_tvg.inlier_matches_are_lc[i] = is_lc;
-      expected_mask[{match.point2D_idx1, match.point2D_idx2}] = is_lc;
-    }
-    mixed_lc_tvg.is_loop_closure =
-        std::any_of(mixed_lc_tvg.inlier_matches_are_lc.begin(),
-                    mixed_lc_tvg.inlier_matches_are_lc.end(),
-                    [](const bool value) { return value; });
-    database->UpdateTwoViewGeometry(image_id1, image_id2, mixed_lc_tvg);
-  }
-
   ExistingMatchedPairingOptions pairing_options;
 
   GeometricVerifierOptions verifier_options;
@@ -537,46 +400,6 @@ TEST(CreateGeometricVerifier, RigVerificationWithNonTrivialFrames) {
                                synthetic_dataset_options.num_points3D,
                                /*num_expected_calibrated=*/0,
                                /*num_expected_calibrated_rig=*/15);
-
-  int num_preserved_pairs = 0;
-  int num_mask_preserved_pairs = 0;
-  for (const auto& [pair_id, tvg] : database->ReadTwoViewGeometries()) {
-    const auto expected_mask_it = expected_lc_masks.find(pair_id);
-    if (expected_mask_it == expected_lc_masks.end()) {
-      continue;
-    }
-    ++num_preserved_pairs;
-    if (tvg.inlier_matches_are_lc.empty()) {
-      EXPECT_FALSE(tvg.is_loop_closure);
-      continue;
-    }
-    ++num_mask_preserved_pairs;
-    ASSERT_EQ(tvg.inlier_matches_are_lc.size(), tvg.inlier_matches.size());
-    std::vector<bool> expected_mask(tvg.inlier_matches.size(), false);
-    for (size_t i = 0; i < tvg.inlier_matches.size(); ++i) {
-      const FeatureMatch& match = tvg.inlier_matches[i];
-      const auto row_it = expected_mask_it->second.find(
-          {match.point2D_idx1, match.point2D_idx2});
-      if (row_it != expected_mask_it->second.end()) {
-        expected_mask[i] = row_it->second;
-      }
-    }
-    EXPECT_EQ(tvg.inlier_matches_are_lc, expected_mask);
-    EXPECT_EQ(tvg.is_loop_closure,
-              std::any_of(expected_mask.begin(),
-                          expected_mask.end(),
-                          [](const bool value) { return value; }));
-    EXPECT_NE(std::find(tvg.inlier_matches_are_lc.begin(),
-                        tvg.inlier_matches_are_lc.end(),
-                        true),
-              tvg.inlier_matches_are_lc.end());
-    EXPECT_NE(std::find(tvg.inlier_matches_are_lc.begin(),
-                        tvg.inlier_matches_are_lc.end(),
-                        false),
-              tvg.inlier_matches_are_lc.end());
-  }
-  EXPECT_GT(num_preserved_pairs, 0);
-  EXPECT_GT(num_mask_preserved_pairs, 0);
 }
 
 TEST(CreateGeometricVerifier, RigVerificationWithTrivialFrames) {
