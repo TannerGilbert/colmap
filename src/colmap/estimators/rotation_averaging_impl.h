@@ -72,13 +72,13 @@ class RotationAveragingProblem {
     std::variant<GravityAligned1DOF, Full3DOF> constraint;
   };
 
-  RotationAveragingProblem(
-      const PoseGraph& pose_graph,
-      const std::vector<PosePrior>& pose_priors,
-      const RotationEstimatorOptions& options,
-      const std::unordered_set<image_t>& active_image_ids,
-      Reconstruction& reconstruction,
-      const CorrespondenceGraph* correspondence_graph = nullptr);
+  RotationAveragingProblem(const PoseGraph& pose_graph,
+                           const std::vector<PosePrior>& pose_priors,
+                           const RotationEstimatorOptions& options,
+                           const std::unordered_set<image_t>& active_image_ids,
+                           Reconstruction& reconstruction,
+                           const CorrespondenceGraph* correspondence_graph =
+                               nullptr);
 
   // Computes residual vector b from current rotation estimates.
   void ComputeResiduals();
