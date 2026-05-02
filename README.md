@@ -28,6 +28,26 @@ Build from the repository root:
 
     bash scripts/build_cpp.sh
 
+Smoke-test the committed native sequential LC CLI path:
+
+    python3 scripts/smoke_native_lc_cli.py
+
+Run the LC-related C++ test subset from the test build:
+
+    cmake -S . -B build-tests -GNinja -DTESTS_ENABLED=ON
+
+    cmake --build build-tests \
+        --parallel 8 \
+        --target feature_matching_test feature_matching_utils_test option_manager_test pairing_test \
+        --target global_positioning_test view_graph_calibration_test \
+        --target correspondence_graph_test database_cache_test database_test two_view_geometry_test \
+        --target track_establishment_test
+
+    /usr/bin/ctest \
+        --test-dir build-tests \
+        --output-on-failure \
+        -R 'controllers/(feature_matching|feature_matching_utils|option_manager|pairing)_test|estimators/(global_positioning|view_graph_calibration)_test|scene/(correspondence_graph|database_cache|database|two_view_geometry)_test|sfm/track_establishment_test'
+
 Minimal CLI workflow:
 
     COLMAP="$PWD/local/bin/colmap"
