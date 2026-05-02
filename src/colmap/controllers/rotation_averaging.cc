@@ -125,7 +125,9 @@ void RotationAveragingPipeline::Run() {
   if (!RunRotationAveraging(options.rotation_estimation,
                             pose_graph,
                             *reconstruction_,
-                            pose_priors)) {
+                            pose_priors,
+                            nullptr,
+                            database_cache_->CorrespondenceGraph().get())) {
     LOG(ERROR) << "Failed to solve rotation averaging";
     return;
   }

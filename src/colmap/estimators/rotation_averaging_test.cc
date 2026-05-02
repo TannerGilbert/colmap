@@ -372,6 +372,35 @@ TEST(RotationAveraging, SkipRiskyLcPairsWithUnknownRigUsesCorrespondenceGraph) {
                            data.database_cache.CorrespondenceGraph().get()));
 }
 
+TEST(RotationAveraging,
+     SkipRiskyLcPairsWithStratifiedGravityUsesCorrespondenceGraph) {
+  SetPRNGSeed(1);
+
+  SyntheticDatasetOptions synthetic_dataset_options;
+  synthetic_dataset_options.num_rigs = 1;
+  synthetic_dataset_options.num_cameras_per_rig = 1;
+  synthetic_dataset_options.num_frames_per_rig = 5;
+  synthetic_dataset_options.num_points3D = 50;
+  synthetic_dataset_options.prior_gravity = true;
+  synthetic_dataset_options.two_view_geometry_has_relative_pose = true;
+  auto data = CreateTestData(synthetic_dataset_options);
+
+  // Remove one gravity prior so the stratified subset path is used.
+  data.pose_priors.pop_back();
+
+  RotationEstimatorOptions options = CreateRATestOptions(/*use_gravity=*/true);
+  options.skip_risky_lc_pairs = true;
+  options.use_stratified = true;
+
+  EXPECT_TRUE(
+      RunRotationAveraging(options,
+                           data.pose_graph,
+                           data.reconstruction,
+                           data.pose_priors,
+                           nullptr,
+                           data.database_cache.CorrespondenceGraph().get()));
+}
+
 // LC-penalty branch inside ComputeMaximumPoseGraphSpanningTree.
 //
 // With ``prioritize_tracking=false`` the MST runs vanilla maximum-weight

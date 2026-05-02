@@ -106,7 +106,8 @@ class RotationEstimator {
       const PoseGraph& pose_graph,
       const std::vector<PosePrior>& pose_priors,
       const std::unordered_set<image_t>& active_image_ids,
-      Reconstruction& reconstruction);
+      Reconstruction& reconstruction,
+      const class CorrespondenceGraph* correspondence_graph = nullptr);
 
   // Core rotation averaging solver.
   bool SolveRotationAveraging(

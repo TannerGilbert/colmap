@@ -305,8 +305,11 @@ bool RotationEstimator::EstimateRotations(
 
   // Handle stratified solving for mixed gravity systems.
   if (UseGravity(options_, pose_priors) && options_.use_stratified) {
-    if (!MaybeSolveGravityAlignedSubset(
-            pose_graph, pose_priors, active_image_ids, reconstruction)) {
+    if (!MaybeSolveGravityAlignedSubset(pose_graph,
+                                        pose_priors,
+                                        active_image_ids,
+                                        reconstruction,
+                                        correspondence_graph)) {
       return false;
     }
   }
@@ -335,7 +338,8 @@ bool RotationEstimator::MaybeSolveGravityAlignedSubset(
     const PoseGraph& pose_graph,
     const std::vector<PosePrior>& pose_priors,
     const std::unordered_set<image_t>& active_image_ids,
-    Reconstruction& reconstruction) {
+    Reconstruction& reconstruction,
+    const CorrespondenceGraph* correspondence_graph) {
   // Build map from image to pose prior.
   std::unordered_map<image_t, const PosePrior*> image_to_pose_prior;
   for (const auto& pose_prior : pose_priors) {
@@ -398,7 +402,9 @@ bool RotationEstimator::MaybeSolveGravityAlignedSubset(
     if (!SolveRotationAveraging(gravity_pose_graph,
                                 pose_priors,
                                 gravity_image_ids,
-                                gravity_reconstruction)) {
+                                gravity_reconstruction,
+                                nullptr,
+                                correspondence_graph)) {
       return false;
     }
 
