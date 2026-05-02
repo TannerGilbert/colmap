@@ -105,5 +105,51 @@ TEST(TwoViewGeometry, Invert) {
             std::vector<bool>({true, false}));
 }
 
+TEST(TwoViewGeometry, PreserveInlierLoopClosureProvenance) {
+  TwoViewGeometry prior;
+  prior.inlier_matches = {
+      FeatureMatch(0, 1), FeatureMatch(2, 3), FeatureMatch(4, 5)};
+  prior.inlier_matches_are_lc = {true, false, true};
+  prior.is_loop_closure = true;
+
+  TwoViewGeometry updated;
+  updated.inlier_matches = {
+      FeatureMatch(2, 3), FeatureMatch(8, 9), FeatureMatch(4, 5)};
+
+  PreserveInlierLoopClosureProvenance(prior, &updated);
+
+  EXPECT_EQ(updated.inlier_matches_are_lc,
+            std::vector<bool>({false, false, true}));
+  EXPECT_TRUE(updated.is_loop_closure);
+}
+
+TEST(TwoViewGeometry, PreserveLegacyPairLevelLoopClosureProvenance) {
+  TwoViewGeometry prior;
+  prior.is_loop_closure = true;
+
+  TwoViewGeometry updated;
+  updated.inlier_matches = {FeatureMatch(0, 1), FeatureMatch(2, 3)};
+
+  PreserveInlierLoopClosureProvenance(prior, &updated);
+
+  EXPECT_EQ(updated.inlier_matches_are_lc, std::vector<bool>({true, true}));
+  EXPECT_TRUE(updated.is_loop_closure);
+}
+
+TEST(TwoViewGeometry, PreserveClearsStaleLoopClosureProvenance) {
+  TwoViewGeometry prior;
+  prior.is_loop_closure = false;
+
+  TwoViewGeometry updated;
+  updated.is_loop_closure = true;
+  updated.inlier_matches = {FeatureMatch(0, 1), FeatureMatch(2, 3)};
+  updated.inlier_matches_are_lc = {true, true};
+
+  PreserveInlierLoopClosureProvenance(prior, &updated);
+
+  EXPECT_TRUE(updated.inlier_matches_are_lc.empty());
+  EXPECT_FALSE(updated.is_loop_closure);
+}
+
 }  // namespace
 }  // namespace colmap

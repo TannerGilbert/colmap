@@ -95,4 +95,9 @@ struct TwoViewGeometry {
   void Invert();
 };
 
+// Preserve loop-closure provenance when a geometry is re-estimated or
+// rewritten and only the surviving inlier rows should keep their old labels.
+void PreserveInlierLoopClosureProvenance(const TwoViewGeometry& prior,
+                                         TwoViewGeometry* updated);
+
 }  // namespace colmap

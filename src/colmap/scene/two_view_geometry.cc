@@ -29,7 +29,32 @@
 
 #include "colmap/scene/two_view_geometry.h"
 
+#include "colmap/util/logging.h"
+
+#include <algorithm>
+#include <unordered_map>
+
 namespace colmap {
+namespace {
+
+struct FeatureMatchKey {
+  point2D_t point2D_idx1 = kInvalidPoint2DIdx;
+  point2D_t point2D_idx2 = kInvalidPoint2DIdx;
+
+  bool operator==(const FeatureMatchKey& other) const {
+    return point2D_idx1 == other.point2D_idx1 &&
+           point2D_idx2 == other.point2D_idx2;
+  }
+};
+
+struct FeatureMatchKeyHash {
+  size_t operator()(const FeatureMatchKey& key) const {
+    return std::hash<point2D_t>()(key.point2D_idx1) ^
+           (std::hash<point2D_t>()(key.point2D_idx2) << 1);
+  }
+};
+
+}  // namespace
 
 void TwoViewGeometry::Invert() {
   if (F) {
@@ -47,6 +72,46 @@ void TwoViewGeometry::Invert() {
   for (auto& match : inlier_matches) {
     std::swap(match.point2D_idx1, match.point2D_idx2);
   }
+}
+
+void PreserveInlierLoopClosureProvenance(const TwoViewGeometry& prior,
+                                         TwoViewGeometry* updated) {
+  THROW_CHECK_NOTNULL(updated);
+  if (prior.inlier_matches_are_lc.empty()) {
+    updated->inlier_matches_are_lc.clear();
+    updated->is_loop_closure = prior.is_loop_closure;
+    if (prior.is_loop_closure && !updated->inlier_matches.empty()) {
+      updated->inlier_matches_are_lc.assign(updated->inlier_matches.size(),
+                                            true);
+    }
+    return;
+  }
+
+  THROW_CHECK_EQ(prior.inlier_matches_are_lc.size(),
+                 prior.inlier_matches.size());
+
+  std::unordered_map<FeatureMatchKey, bool, FeatureMatchKeyHash>
+      prior_inlier_is_lc;
+  prior_inlier_is_lc.reserve(prior.inlier_matches.size());
+  for (size_t i = 0; i < prior.inlier_matches.size(); ++i) {
+    const FeatureMatch& match = prior.inlier_matches[i];
+    prior_inlier_is_lc[{match.point2D_idx1, match.point2D_idx2}] =
+        prior.inlier_matches_are_lc[i];
+  }
+
+  updated->inlier_matches_are_lc.assign(updated->inlier_matches.size(), false);
+  for (size_t i = 0; i < updated->inlier_matches.size(); ++i) {
+    const FeatureMatch& match = updated->inlier_matches[i];
+    const auto it =
+        prior_inlier_is_lc.find({match.point2D_idx1, match.point2D_idx2});
+    if (it != prior_inlier_is_lc.end()) {
+      updated->inlier_matches_are_lc[i] = it->second;
+    }
+  }
+  updated->is_loop_closure =
+      std::any_of(updated->inlier_matches_are_lc.begin(),
+                  updated->inlier_matches_are_lc.end(),
+                  [](const bool value) { return value; });
 }
 
 }  // namespace colmap
