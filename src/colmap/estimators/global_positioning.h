@@ -40,6 +40,7 @@ struct GlobalPositionerOptions {
   LossConfig loss = {LossFunctionType::HUBER, 0.1, 1.0};
 
   // Whether to use custom parameter block ordering for Schur-based solvers.
+  // Disable for deterministic behavior when using a fixed random seed.
   bool use_parameter_block_ordering = true;
 
   // Apply 0.5x ScaledLoss to BATA residuals from cameras without an EXIF

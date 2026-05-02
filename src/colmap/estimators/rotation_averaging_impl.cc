@@ -232,7 +232,6 @@ void RotationAveragingProblem::BuildPairConstraints(
 
   for (const auto& [pair_id, edge] : pose_graph.ValidEdges()) {
     const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
-
     const auto& image1 = reconstruction.Image(image_id1);
     const auto& image2 = reconstruction.Image(image_id2);
     const auto& frame1 = *image1.FramePtr();
@@ -822,6 +821,5 @@ bool RotationAveragingSolver::SolveIRLS(RotationAveragingProblem& problem) {
 
   return true;
 }
-
 
 }  // namespace colmap

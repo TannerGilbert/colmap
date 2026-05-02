@@ -42,7 +42,7 @@ bool AllSensorsFromRigKnown(const std::unordered_map<rig_t, Rig>& rigs) {
   return all_known;
 }
 
-// Compute maximum spanning tree of the pose graph weighted by match count.
+// Compute maximum spanning tree of the pose graph weighted by inlier count.
 // Returns the root image_id and populates the parents map.
 image_t ComputeMaximumPoseGraphSpanningTree(
     const PoseGraph& pose_graph,
@@ -59,11 +59,12 @@ image_t ComputeMaximumPoseGraphSpanningTree(
     idx_to_image_id.push_back(image_id);
   }
 
-  // Build edges and weights from the pose graph.
+  // Build edges and weights from view graph.
   std::vector<std::pair<int, int>> edges;
   std::vector<float> weights;
   edges.reserve(pose_graph.NumEdges());
   weights.reserve(pose_graph.NumEdges());
+
   for (const auto& [pair_id, edge] : pose_graph.ValidEdges()) {
     const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
     const auto it1 = image_id_to_idx.find(image_id1);
