@@ -268,6 +268,12 @@ SequentialMatchingTab::SequentialMatchingTab(QWidget* parent,
       &options_->sequential_pairing->loop_detection_max_num_features,
       "loop_detection_max_num_features",
       -1);
+  options_widget_->AddOptionBool(
+      &options_->sequential_pairing->mark_loop_detection_as_lc,
+      "mark_loop_detection_as_lc");
+  options_widget_->AddOptionBool(
+      &options_->sequential_pairing->mark_non_consecutive_as_lc,
+      "mark_non_consecutive_as_lc");
   options_widget_->AddOptionFilePath(
       &options_->sequential_pairing->vocab_tree_path, "vocab_tree_path");
 
@@ -307,6 +313,8 @@ VocabTreeMatchingTab::VocabTreeMatchingTab(QWidget* parent,
       0);
   options_widget_->AddOptionInt(
       &options_->vocab_tree_pairing->max_num_features, "max_num_features", -1);
+  options_widget_->AddOptionBool(
+      &options_->vocab_tree_pairing->mark_matches_as_lc, "mark_matches_as_lc");
   options_widget_->AddOptionFilePath(
       &options_->vocab_tree_pairing->vocab_tree_path, "vocab_tree_path");
 

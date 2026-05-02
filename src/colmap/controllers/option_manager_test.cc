@@ -32,6 +32,7 @@
 #include "colmap/controllers/global_pipeline.h"
 #include "colmap/controllers/image_reader.h"
 #include "colmap/controllers/incremental_pipeline.h"
+#include "colmap/controllers/pairing.h"
 #include "colmap/feature/sift.h"
 #include "colmap/mvs/patch_match_options.h"
 #include "colmap/util/file.h"
@@ -128,6 +129,8 @@ TEST(OptionManager, WriteAndRead) {
   options_write.AddDatabaseOptions();
   options_write.AddImageOptions();
   options_write.AddFeatureExtractionOptions();
+  options_write.AddSequentialPairingOptions();
+  options_write.AddVocabTreePairingOptions();
   options_write.AddMapperOptions();
   options_write.AddGlobalMapperOptions();
 
@@ -135,8 +138,17 @@ TEST(OptionManager, WriteAndRead) {
   *options_write.image_path = test_dir / "images";
   options_write.feature_extraction->max_image_size = 2048;
   options_write.feature_extraction->sift->max_num_features = 4096;
+  options_write.sequential_pairing->mark_loop_detection_as_lc = true;
+  options_write.sequential_pairing->mark_non_consecutive_as_lc = true;
+  options_write.vocab_tree_pairing->mark_matches_as_lc = true;
   options_write.mapper->min_num_matches = 20;
   options_write.global_mapper->mapper.track_lc_second_pass = true;
+  options_write.global_mapper->mapper.global_positioning.use_lc_observations =
+      true;
+  options_write.global_mapper->mapper.rotation_averaging.skip_risky_lc_pairs =
+      true;
+  options_write.global_mapper->mapper.rotation_averaging.use_video_constraints =
+      true;
 
   // Write to file
   options_write.Write(config_path);
@@ -147,6 +159,8 @@ TEST(OptionManager, WriteAndRead) {
   options_read.AddDatabaseOptions();
   options_read.AddImageOptions();
   options_read.AddFeatureExtractionOptions();
+  options_read.AddSequentialPairingOptions();
+  options_read.AddVocabTreePairingOptions();
   options_read.AddMapperOptions();
   options_read.AddGlobalMapperOptions();
 
@@ -159,10 +173,28 @@ TEST(OptionManager, WriteAndRead) {
             options_write.feature_extraction->max_image_size);
   EXPECT_EQ(options_read.feature_extraction->sift->max_num_features,
             options_write.feature_extraction->sift->max_num_features);
+  EXPECT_EQ(options_read.sequential_pairing->mark_loop_detection_as_lc,
+            options_write.sequential_pairing->mark_loop_detection_as_lc);
+  EXPECT_EQ(options_read.sequential_pairing->mark_non_consecutive_as_lc,
+            options_write.sequential_pairing->mark_non_consecutive_as_lc);
+  EXPECT_EQ(options_read.vocab_tree_pairing->mark_matches_as_lc,
+            options_write.vocab_tree_pairing->mark_matches_as_lc);
   EXPECT_EQ(options_read.mapper->min_num_matches,
             options_write.mapper->min_num_matches);
   EXPECT_EQ(options_read.global_mapper->mapper.track_lc_second_pass,
             options_write.global_mapper->mapper.track_lc_second_pass);
+  EXPECT_EQ(
+      options_read.global_mapper->mapper.global_positioning.use_lc_observations,
+      options_write.global_mapper->mapper.global_positioning
+          .use_lc_observations);
+  EXPECT_EQ(
+      options_read.global_mapper->mapper.rotation_averaging.skip_risky_lc_pairs,
+      options_write.global_mapper->mapper.rotation_averaging
+          .skip_risky_lc_pairs);
+  EXPECT_EQ(options_read.global_mapper->mapper.rotation_averaging
+                .use_video_constraints,
+            options_write.global_mapper->mapper.rotation_averaging
+                .use_video_constraints);
 }
 
 TEST(OptionManager, ReRead) {

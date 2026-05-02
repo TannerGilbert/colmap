@@ -405,6 +405,10 @@ void OptionManager::AddSequentialPairingOptions() {
       &sequential_pairing->loop_detection_num_images_after_verification);
   AddDefaultOption("SequentialMatching.loop_detection_max_num_features",
                    &sequential_pairing->loop_detection_max_num_features);
+  AddDefaultOption("SequentialMatching.mark_loop_detection_as_lc",
+                   &sequential_pairing->mark_loop_detection_as_lc);
+  AddDefaultOption("SequentialMatching.mark_non_consecutive_as_lc",
+                   &sequential_pairing->mark_non_consecutive_as_lc);
   AddDefaultOption("SequentialMatching.vocab_tree_path",
                    &sequential_pairing->vocab_tree_path);
   AddDefaultOption("SequentialMatching.num_threads",
@@ -434,6 +438,8 @@ void OptionManager::AddVocabTreePairingOptions() {
                    &vocab_tree_pairing->vocab_tree_path);
   AddDefaultOption("VocabTreeMatching.match_list_path",
                    &vocab_tree_pairing->match_list_path);
+  AddDefaultOption("VocabTreeMatching.mark_matches_as_lc",
+                   &vocab_tree_pairing->mark_matches_as_lc);
   AddDefaultOption("VocabTreeMatching.num_threads",
                    &vocab_tree_pairing->num_threads);
 }
@@ -730,9 +736,11 @@ void OptionManager::AddGlobalMapperOptions() {
                    &global_mapper->mapper.global_positioning.optimize_points);
   AddDefaultOption("GlobalMapper.gp_optimize_scales",
                    &global_mapper->mapper.global_positioning.optimize_scales);
+  AddDefaultOption("GlobalMapper.gp_loss_function_scale",
+                   &global_mapper->mapper.global_positioning.loss.scale);
   AddDefaultOption(
-      "GlobalMapper.gp_loss_function_scale",
-      &global_mapper->mapper.global_positioning.loss.scale);
+      "GlobalMapper.gp_use_lc_observations",
+      &global_mapper->mapper.global_positioning.use_lc_observations);
   AddDefaultOption("GlobalMapper.gp_max_num_iterations",
                    &global_mapper->mapper.global_positioning.solver_options
                         .max_num_iterations);
@@ -762,9 +770,8 @@ void OptionManager::AddGlobalMapperOptions() {
                    &global_mapper->mapper.bundle_adjustment.ceres->use_gpu);
   AddDefaultOption("GlobalMapper.ba_ceres_gpu_index",
                    &global_mapper->mapper.bundle_adjustment.ceres->gpu_index);
-  AddDefaultOption(
-      "GlobalMapper.ba_ceres_loss_function_scale",
-      &global_mapper->mapper.bundle_adjustment.ceres->loss.scale);
+  AddDefaultOption("GlobalMapper.ba_ceres_loss_function_scale",
+                   &global_mapper->mapper.bundle_adjustment.ceres->loss.scale);
   AddDefaultOption("GlobalMapper.ba_ceres_max_num_iterations",
                    &global_mapper->mapper.bundle_adjustment.ceres
                         ->solver_options.max_num_iterations);
@@ -791,6 +798,18 @@ void OptionManager::AddGlobalMapperOptions() {
   AddDefaultOption(
       "GlobalMapper.ra_max_rotation_error_deg",
       &global_mapper->mapper.rotation_averaging.max_rotation_error_deg);
+  AddDefaultOption(
+      "GlobalMapper.ra_skip_risky_lc_pairs",
+      &global_mapper->mapper.rotation_averaging.skip_risky_lc_pairs);
+  AddDefaultOption(
+      "GlobalMapper.ra_use_video_constraints",
+      &global_mapper->mapper.rotation_averaging.use_video_constraints);
+  AddDefaultOption(
+      "GlobalMapper.ra_video_tracking_huber_scale",
+      &global_mapper->mapper.rotation_averaging.video_tracking_huber_scale);
+  AddDefaultOption(
+      "GlobalMapper.ra_video_lc_cauchy_scale",
+      &global_mapper->mapper.rotation_averaging.video_lc_cauchy_scale);
 
   // Threshold options.
   AddDefaultOption("GlobalMapper.max_angular_reproj_error_deg",

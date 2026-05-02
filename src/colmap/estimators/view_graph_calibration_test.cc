@@ -36,6 +36,11 @@
 #include "colmap/sensor/models.h"
 #include "colmap/util/eigen_matchers.h"
 
+#include <algorithm>
+#include <map>
+#include <unordered_map>
+#include <unordered_set>
+
 #include <gtest/gtest.h>
 
 namespace colmap {
@@ -194,6 +199,9 @@ TEST(CalibrateViewGraph, RelativePoseReestimation) {
   // The perturbation must exceed test thresholds (0.1 rad rotation, 0.1
   // normalized translation error) to ensure re-estimation actually runs.
   std::unordered_map<image_pair_t, Rigid3d> gt_poses;
+  std::unordered_set<image_pair_t> lc_pair_ids;
+  std::map<image_pair_t, std::map<std::pair<point2D_t, point2D_t>, bool>>
+      expected_lc_masks;
   for (const auto& [pair_id, tvg] : database->ReadTwoViewGeometries()) {
     const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
     const Image& image1 = reconstruction.Image(image_id1);
@@ -202,6 +210,25 @@ TEST(CalibrateViewGraph, RelativePoseReestimation) {
 
     // Perturb the relative pose stored in database.
     TwoViewGeometry perturbed_tvg = tvg;
+    if (lc_pair_ids.size() < 3) {
+      perturbed_tvg.is_loop_closure = true;
+      lc_pair_ids.insert(pair_id);
+    }
+    if (expected_lc_masks.size() < 3) {
+      perturbed_tvg.inlier_matches_are_lc.resize(
+          perturbed_tvg.inlier_matches.size());
+      auto& expected_mask = expected_lc_masks[pair_id];
+      for (size_t i = 0; i < perturbed_tvg.inlier_matches.size(); ++i) {
+        const bool is_lc = i % 3 == 0;
+        const FeatureMatch& match = perturbed_tvg.inlier_matches[i];
+        perturbed_tvg.inlier_matches_are_lc[i] = is_lc;
+        expected_mask[{match.point2D_idx1, match.point2D_idx2}] = is_lc;
+      }
+      perturbed_tvg.is_loop_closure =
+          std::any_of(perturbed_tvg.inlier_matches_are_lc.begin(),
+                      perturbed_tvg.inlier_matches_are_lc.end(),
+                      [](const bool value) { return value; });
+    }
     if (perturbed_tvg.cam2_from_cam1.has_value()) {
       const Rigid3d perturbation(
           Eigen::Quaterniond(
@@ -228,6 +255,34 @@ TEST(CalibrateViewGraph, RelativePoseReestimation) {
   for (const auto& [pair_id, tvg] : database->ReadTwoViewGeometries()) {
     if (tvg.config != TwoViewGeometry::CALIBRATED) continue;
 
+    const auto expected_mask_it = expected_lc_masks.find(pair_id);
+    if (expected_mask_it != expected_lc_masks.end()) {
+      ASSERT_EQ(tvg.inlier_matches_are_lc.size(), tvg.inlier_matches.size());
+      std::vector<bool> expected_mask(tvg.inlier_matches.size(), false);
+      for (size_t i = 0; i < tvg.inlier_matches.size(); ++i) {
+        const FeatureMatch& match = tvg.inlier_matches[i];
+        const auto row_it = expected_mask_it->second.find(
+            {match.point2D_idx1, match.point2D_idx2});
+        if (row_it != expected_mask_it->second.end()) {
+          expected_mask[i] = row_it->second;
+        }
+      }
+      EXPECT_EQ(tvg.inlier_matches_are_lc, expected_mask);
+      EXPECT_EQ(tvg.is_loop_closure,
+                std::any_of(expected_mask.begin(),
+                            expected_mask.end(),
+                            [](const bool value) { return value; }));
+      EXPECT_NE(std::find(tvg.inlier_matches_are_lc.begin(),
+                          tvg.inlier_matches_are_lc.end(),
+                          true),
+                tvg.inlier_matches_are_lc.end());
+      EXPECT_NE(std::find(tvg.inlier_matches_are_lc.begin(),
+                          tvg.inlier_matches_are_lc.end(),
+                          false),
+                tvg.inlier_matches_are_lc.end());
+    } else {
+      EXPECT_EQ(tvg.is_loop_closure, lc_pair_ids.count(pair_id) > 0);
+    }
     ASSERT_TRUE(tvg.cam2_from_cam1.has_value());
     EXPECT_NEAR(tvg.cam2_from_cam1->translation().norm(), 1.0, 1e-6);
 

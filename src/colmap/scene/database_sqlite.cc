@@ -32,6 +32,8 @@
 #include "colmap/util/string.h"
 #include "colmap/util/version.h"
 
+#include <cstdint>
+
 #include <sqlite3.h>
 
 namespace colmap {
@@ -143,6 +145,51 @@ FeatureMatches FeatureMatchesFromBlob(const FeatureMatchesBlob& blob) {
     matches[i].point2D_idx2 = blob(i, 1);
   }
   return matches;
+}
+
+std::vector<bool> InlierMatchesAreLcFromBlob(sqlite3_stmt* sql_stmt,
+                                             const int col,
+                                             const size_t num_inliers) {
+  if (sqlite3_column_type(sql_stmt, col) == SQLITE_NULL) {
+    return {};
+  }
+
+  const size_t num_bytes =
+      static_cast<size_t>(sqlite3_column_bytes(sql_stmt, col));
+  if (num_bytes == 0) {
+    return {};
+  }
+  THROW_CHECK_EQ(num_bytes, num_inliers);
+
+  const auto* data =
+      static_cast<const uint8_t*>(sqlite3_column_blob(sql_stmt, col));
+  std::vector<bool> mask(num_bytes);
+  for (size_t i = 0; i < num_bytes; ++i) {
+    mask[i] = data[i] != 0;
+  }
+  return mask;
+}
+
+void BindInlierMatchesAreLcBlob(sqlite3_stmt* sql_stmt,
+                                const std::vector<bool>& mask,
+                                const size_t num_inliers,
+                                const int col,
+                                std::vector<uint8_t>* storage) {
+  if (mask.empty()) {
+    SQLITE3_CALL(sqlite3_bind_null(sql_stmt, col));
+    return;
+  }
+
+  THROW_CHECK_EQ(mask.size(), num_inliers);
+  storage->resize(mask.size());
+  for (size_t i = 0; i < mask.size(); ++i) {
+    (*storage)[i] = mask[i] ? 1 : 0;
+  }
+  SQLITE3_CALL(sqlite3_bind_blob(sql_stmt,
+                                 col,
+                                 reinterpret_cast<const char*>(storage->data()),
+                                 static_cast<int>(storage->size()),
+                                 SQLITE_STATIC));
 }
 
 template <typename MatrixType>
@@ -987,8 +1034,14 @@ class SqliteDatabase : public Database {
           sql_stmt_read_two_view_geometry_, rc, 8);
       two_view_geometry.cam2_from_cam1 = cam2_from_cam1;
     }
+    two_view_geometry.is_loop_closure =
+        sqlite3_column_int(sql_stmt_read_two_view_geometry_, 9) != 0;
 
     two_view_geometry.inlier_matches = FeatureMatchesFromBlob(blob);
+    two_view_geometry.inlier_matches_are_lc =
+        InlierMatchesAreLcFromBlob(sql_stmt_read_two_view_geometry_,
+                                   10,
+                                   two_view_geometry.inlier_matches.size());
     if (two_view_geometry.F) {
       two_view_geometry.F->transposeInPlace();
     }
@@ -1064,6 +1117,12 @@ class SqliteDatabase : public Database {
             sql_stmt_read_two_view_geometries_, rc, 9);
         two_view_geometry.cam2_from_cam1 = cam2_from_cam1;
       }
+      two_view_geometry.is_loop_closure =
+          sqlite3_column_int(sql_stmt_read_two_view_geometries_, 10) != 0;
+      two_view_geometry.inlier_matches_are_lc =
+          InlierMatchesAreLcFromBlob(sql_stmt_read_two_view_geometries_,
+                                     11,
+                                     two_view_geometry.inlier_matches.size());
 
       if (two_view_geometry.F) {
         two_view_geometry.F->transposeInPlace();
@@ -1385,6 +1444,16 @@ class SqliteDatabase : public Database {
       SQLITE3_CALL(sqlite3_bind_null(sql_stmt_write_two_view_geometry_, 9));
       SQLITE3_CALL(sqlite3_bind_null(sql_stmt_write_two_view_geometry_, 10));
     }
+    SQLITE3_CALL(
+        sqlite3_bind_int(sql_stmt_write_two_view_geometry_,
+                         11,
+                         two_view_geometry_ptr->is_loop_closure ? 1 : 0));
+    std::vector<uint8_t> inlier_matches_are_lc_blob;
+    BindInlierMatchesAreLcBlob(sql_stmt_write_two_view_geometry_,
+                               two_view_geometry_ptr->inlier_matches_are_lc,
+                               two_view_geometry_ptr->inlier_matches.size(),
+                               12,
+                               &inlier_matches_are_lc_blob);
     SQLITE3_CALL(sqlite3_step(sql_stmt_write_two_view_geometry_));
   }
 
@@ -1570,6 +1639,7 @@ class SqliteDatabase : public Database {
     }
     TwoViewGeometry geom = ReadTwoViewGeometry(image_id1, image_id2);
     geom.inlier_matches.clear();
+    geom.inlier_matches_are_lc.clear();
     UpdateTwoViewGeometry(image_id1, image_id2, geom);
   }
 
@@ -1801,13 +1871,16 @@ class SqliteDatabase : public Database {
     prepare_sql_stmt("SELECT pair_id, rows FROM matches WHERE rows > 0;",
                      &sql_stmt_read_num_matches_);
     prepare_sql_stmt(
-        "SELECT rows, cols, data, config, F, E, H, qvec, tvec FROM "
+        "SELECT rows, cols, data, config, F, E, H, qvec, tvec, "
+        "is_loop_closure, inlier_matches_are_lc FROM "
         "two_view_geometries WHERE pair_id = ?;",
         &sql_stmt_read_two_view_geometry_);
     prepare_sql_stmt(
-        "SELECT * FROM two_view_geometries WHERE rows > 0 OR F IS NOT NULL OR "
-        "E IS NOT NULL OR H IS NOT NULL OR qvec IS NOT NULL OR tvec IS NOT "
-        "NULL;",
+        "SELECT pair_id, rows, cols, data, config, F, E, H, qvec, tvec, "
+        "is_loop_closure, inlier_matches_are_lc FROM two_view_geometries "
+        "WHERE rows > 0 OR "
+        "F IS NOT NULL OR E IS NOT NULL OR H IS NOT NULL OR qvec IS NOT NULL "
+        "OR tvec IS NOT NULL;",
         &sql_stmt_read_two_view_geometries_);
     prepare_sql_stmt(
         "SELECT pair_id, rows FROM two_view_geometries WHERE rows > 0;",
@@ -1855,7 +1928,8 @@ class SqliteDatabase : public Database {
         &sql_stmt_write_matches_);
     prepare_sql_stmt(
         "INSERT INTO two_view_geometries(pair_id, rows, cols, data, config, F, "
-        "E, H, qvec, tvec) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        "E, H, qvec, tvec, is_loop_closure, inlier_matches_are_lc) VALUES(?, "
+        "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
         &sql_stmt_write_two_view_geometry_);
 
     //////////////////////////////////////////////////////////////////////////////
@@ -2060,7 +2134,9 @@ class SqliteDatabase : public Database {
           "    E        BLOB,"
           "    H        BLOB,"
           "    qvec     BLOB,"
-          "    tvec     BLOB);";
+          "    tvec     BLOB,"
+          "    is_loop_closure INTEGER NOT NULL DEFAULT 0,"
+          "    inlier_matches_are_lc BLOB);";
       SQLITE3_EXEC(database_, sql.c_str(), nullptr);
     }
   }
@@ -2094,6 +2170,14 @@ class SqliteDatabase : public Database {
     maybe_add_two_view_geometries_blob_column("H");
     maybe_add_two_view_geometries_blob_column("qvec");
     maybe_add_two_view_geometries_blob_column("tvec");
+    if (!ExistsColumn("two_view_geometries", "is_loop_closure")) {
+      SQLITE3_EXEC(
+          database_,
+          "ALTER TABLE two_view_geometries ADD COLUMN is_loop_closure INTEGER "
+          "NOT NULL DEFAULT 0;",
+          nullptr);
+    }
+    maybe_add_two_view_geometries_blob_column("inlier_matches_are_lc");
 
     // Read current user_version for migration gating.
     int user_version = 0;

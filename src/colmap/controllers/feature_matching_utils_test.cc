@@ -33,6 +33,8 @@
 #include "colmap/scene/synthetic.h"
 #include "colmap/util/testing.h"
 
+#include <algorithm>
+
 #include <gtest/gtest.h>
 
 namespace colmap {
@@ -83,6 +85,24 @@ std::vector<std::pair<image_t, image_t>> AllPairs(
   return pairs;
 }
 
+std::pair<image_t, image_t> NonConsecutiveImagePair(Database& database) {
+  std::vector<Image> images = database.ReadAllImages();
+  std::sort(images.begin(), images.end(), [](const Image& a, const Image& b) {
+    return a.Name() < b.Name();
+  });
+  THROW_CHECK_GE(images.size(), 3);
+  return {images[0].ImageId(), images[2].ImageId()};
+}
+
+std::pair<image_t, image_t> ConsecutiveImagePair(Database& database) {
+  std::vector<Image> images = database.ReadAllImages();
+  std::sort(images.begin(), images.end(), [](const Image& a, const Image& b) {
+    return a.Name() < b.Name();
+  });
+  THROW_CHECK_GE(images.size(), 2);
+  return {images[0].ImageId(), images[1].ImageId()};
+}
+
 // Match pairs without geometric verification, then clear TVGs.
 // Leaves matches in the database ready for a GeometricVerifierController.
 void MatchPairsWithoutVerification(
@@ -97,6 +117,49 @@ void MatchPairsWithoutVerification(
   ASSERT_TRUE(matcher.Setup());
   matcher.Match(pairs);
   data.database->ClearTwoViewGeometries();
+}
+
+TEST(MergeLoopClosureInlierMatches,
+     MatchesVideoSfMEndpointUniquenessAndOrdering) {
+  const FeatureMatches transitive_matches = {
+      {1, 10}, {2, 20}, {2, 21}, {3, 20}};
+  const FeatureMatches candidate_matches = {
+      {1, 99}, {4, 20}, {5, 50}, {6, 60}, {5, 70}};
+
+  FeatureMatches merged_matches;
+  std::vector<bool> merged_matches_are_lc;
+  MergeLoopClosureInlierMatches(transitive_matches,
+                                candidate_matches,
+                                &merged_matches,
+                                &merged_matches_are_lc);
+
+  ASSERT_EQ(merged_matches.size(), 7);
+  EXPECT_EQ(merged_matches[0], FeatureMatch(1, 10));
+  EXPECT_EQ(merged_matches[1], FeatureMatch(2, 20));
+  EXPECT_EQ(merged_matches[2], FeatureMatch(2, 21));
+  EXPECT_EQ(merged_matches[3], FeatureMatch(3, 20));
+  EXPECT_EQ(merged_matches[4], FeatureMatch(5, 50));
+  EXPECT_EQ(merged_matches[5], FeatureMatch(6, 60));
+  EXPECT_EQ(merged_matches[6], FeatureMatch(5, 70));
+  EXPECT_EQ(merged_matches_are_lc,
+            std::vector<bool>({false, false, false, false, true, true, true}));
+}
+
+TEST(MergeLoopClosureInlierMatches, CollidingCandidatesDoNotBecomeLcRows) {
+  const FeatureMatches transitive_matches = {{1, 10}, {2, 20}};
+  const FeatureMatches candidate_matches = {{1, 30}, {3, 20}};
+
+  FeatureMatches merged_matches;
+  std::vector<bool> merged_matches_are_lc;
+  MergeLoopClosureInlierMatches(transitive_matches,
+                                candidate_matches,
+                                &merged_matches,
+                                &merged_matches_are_lc);
+
+  ASSERT_EQ(merged_matches.size(), 2);
+  EXPECT_EQ(merged_matches[0], FeatureMatch(1, 10));
+  EXPECT_EQ(merged_matches[1], FeatureMatch(2, 20));
+  EXPECT_EQ(merged_matches_are_lc, std::vector<bool>({false, false}));
 }
 
 TEST(FeatureMatcherController, MatchEmptyPairs) {
@@ -152,7 +215,7 @@ TEST(FeatureMatcherController, MatchSkipsDuplicatePairs) {
       matching_options, geometry_options, data.cache);
   ASSERT_TRUE(controller.Setup());
 
-  ASSERT_GE(data.image_ids.size(), 2);
+  ASSERT_GE(data.image_ids.size(), 3);
   const image_t id1 = data.image_ids[0];
   const image_t id2 = data.image_ids[1];
 
@@ -173,7 +236,7 @@ TEST(FeatureMatcherController, MatchSkipsExistingResults) {
       matching_options, geometry_options, data.cache);
   ASSERT_TRUE(controller.Setup());
 
-  ASSERT_GE(data.image_ids.size(), 2);
+  ASSERT_GE(data.image_ids.size(), 3);
   const image_t id1 = data.image_ids[0];
   const image_t id2 = data.image_ids[1];
 
@@ -249,6 +312,281 @@ TEST(FeatureMatcherController, MatchSkipGeometricVerification) {
       data.database->ReadTwoViewGeometry(data.image_ids[0], data.image_ids[1]);
   EXPECT_EQ(tvg.config, TwoViewGeometry::UNDEFINED);
   EXPECT_TRUE(tvg.inlier_matches.empty());
+}
+
+TEST(FeatureMatcherController, MatchMarksLoopClosure) {
+  auto data = CreateTestData(3);
+  const auto [image_id1, image_id2] = NonConsecutiveImagePair(*data.database);
+  data.database->ClearMatches();
+  data.database->ClearTwoViewGeometries();
+
+  FeatureMatchingOptions matching_options = DefaultMatchingOptions();
+  TwoViewGeometryOptions geometry_options;
+
+  FeatureMatcherController controller(
+      matching_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  controller.Match({{image_id1, image_id2}}, /*mark_as_loop_closure=*/true);
+
+  const auto tvg = data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  EXPECT_TRUE(tvg.is_loop_closure);
+}
+
+TEST(FeatureMatcherController, MatchDoesNotMarkDirectPairAsLoopClosure) {
+  auto data = CreateTestData(3);
+  const auto [image_id1, image_id2] = ConsecutiveImagePair(*data.database);
+  data.database->ClearMatches();
+  data.database->ClearTwoViewGeometries();
+
+  FeatureMatchingOptions matching_options = DefaultMatchingOptions();
+  TwoViewGeometryOptions geometry_options;
+
+  FeatureMatcherController controller(
+      matching_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  controller.Match({{image_id1, image_id2}}, /*mark_as_loop_closure=*/true);
+
+  const auto tvg = data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  EXPECT_FALSE(tvg.is_loop_closure);
+  EXPECT_TRUE(tvg.inlier_matches_are_lc.empty());
+}
+
+TEST(FeatureMatcherController, MatchDefaultDoesNotMarkLoopClosure) {
+  auto data = CreateTestData(3);
+  data.database->ClearMatches();
+  data.database->ClearTwoViewGeometries();
+
+  FeatureMatchingOptions matching_options = DefaultMatchingOptions();
+  TwoViewGeometryOptions geometry_options;
+
+  FeatureMatcherController controller(
+      matching_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  ASSERT_GE(data.image_ids.size(), 2);
+  controller.Match({{data.image_ids[0], data.image_ids[1]}});
+
+  const auto tvg =
+      data.database->ReadTwoViewGeometry(data.image_ids[0], data.image_ids[1]);
+  EXPECT_FALSE(tvg.is_loop_closure);
+  EXPECT_TRUE(tvg.inlier_matches_are_lc.empty());
+}
+
+TEST(FeatureMatcherController,
+     MatchLoopClosureBelowMinInliersDoesNotPersistLc) {
+  auto data = CreateTestData(3);
+  data.database->ClearMatches();
+  data.database->ClearTwoViewGeometries();
+
+  FeatureMatchingOptions matching_options = DefaultMatchingOptions();
+  TwoViewGeometryOptions geometry_options;
+  geometry_options.min_num_inliers = 1000000;
+
+  FeatureMatcherController controller(
+      matching_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  ASSERT_GE(data.image_ids.size(), 2);
+  controller.Match({{data.image_ids[0], data.image_ids[1]}},
+                   /*mark_as_loop_closure=*/true);
+
+  const auto tvg =
+      data.database->ReadTwoViewGeometry(data.image_ids[0], data.image_ids[1]);
+  EXPECT_TRUE(tvg.inlier_matches.empty());
+  EXPECT_TRUE(tvg.inlier_matches_are_lc.empty());
+  EXPECT_FALSE(tvg.is_loop_closure);
+}
+
+TEST(FeatureMatcherController, MatchWithProvenanceUpgradesExistingNonLcPair) {
+  auto data = CreateTestData(3);
+  data.database->ClearMatches();
+  data.database->ClearTwoViewGeometries();
+
+  FeatureMatchingOptions matching_options = DefaultMatchingOptions();
+  TwoViewGeometryOptions geometry_options;
+
+  FeatureMatcherController controller(
+      matching_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  const auto [image_id1, image_id2] = NonConsecutiveImagePair(*data.database);
+  controller.Match({{image_id1, image_id2}});
+  ASSERT_FALSE(
+      data.database->ReadTwoViewGeometry(image_id1, image_id2).is_loop_closure);
+
+  controller.MatchWithProvenance({{image_id1, image_id2, true}});
+
+  const auto tvg = data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  EXPECT_TRUE(tvg.is_loop_closure);
+  EXPECT_EQ(tvg.inlier_matches.size(), tvg.inlier_matches_are_lc.size());
+  EXPECT_TRUE(std::all_of(tvg.inlier_matches_are_lc.begin(),
+                          tvg.inlier_matches_are_lc.end(),
+                          [](const bool value) { return value; }));
+}
+
+TEST(FeatureMatcherController, MatchWithProvenanceDowngradesStaleLcPair) {
+  auto data = CreateTestData(3);
+  data.database->ClearMatches();
+  data.database->ClearTwoViewGeometries();
+
+  FeatureMatchingOptions matching_options = DefaultMatchingOptions();
+  TwoViewGeometryOptions geometry_options;
+
+  FeatureMatcherController controller(
+      matching_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  const auto [image_id1, image_id2] = NonConsecutiveImagePair(*data.database);
+  controller.MatchWithProvenance({{image_id1, image_id2, true}});
+  ASSERT_TRUE(
+      data.database->ReadTwoViewGeometry(image_id1, image_id2).is_loop_closure);
+
+  controller.MatchWithProvenance({{image_id1, image_id2, false}});
+
+  const auto tvg = data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  EXPECT_FALSE(tvg.is_loop_closure);
+  EXPECT_TRUE(tvg.inlier_matches_are_lc.empty());
+}
+
+TEST(FeatureMatcherController,
+     MatchWithProvenanceDoesNotUpgradeDirectTrackingPair) {
+  auto data = CreateTestData(3);
+  data.database->ClearMatches();
+  data.database->ClearTwoViewGeometries();
+
+  FeatureMatchingOptions matching_options = DefaultMatchingOptions();
+  TwoViewGeometryOptions geometry_options;
+
+  FeatureMatcherController controller(
+      matching_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  ASSERT_GE(data.image_ids.size(), 2);
+  const image_t image_id1 = data.image_ids[0];
+  const image_t image_id2 = data.image_ids[1];
+  controller.Match({{image_id1, image_id2}});
+  const TwoViewGeometry before =
+      data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  ASSERT_FALSE(before.inlier_matches.empty());
+  ASSERT_FALSE(before.is_loop_closure);
+  ASSERT_TRUE(before.inlier_matches_are_lc.empty());
+
+  controller.MatchWithProvenance({{image_id1, image_id2, true}});
+
+  const TwoViewGeometry after =
+      data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  EXPECT_EQ(after.inlier_matches, before.inlier_matches);
+  EXPECT_TRUE(after.inlier_matches_are_lc.empty());
+  EXPECT_FALSE(after.is_loop_closure);
+}
+
+TEST(FeatureMatcherController, MatchWithProvenanceMarksMixedLoopClosures) {
+  auto data = CreateTestData(3);
+  data.database->ClearMatches();
+  data.database->ClearTwoViewGeometries();
+
+  FeatureMatchingOptions matching_options = DefaultMatchingOptions();
+  TwoViewGeometryOptions geometry_options;
+
+  FeatureMatcherController controller(
+      matching_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  ASSERT_GE(data.image_ids.size(), 3);
+  controller.MatchWithProvenance({
+      {data.image_ids[0], data.image_ids[1], false},
+      {data.image_ids[0], data.image_ids[2], true},
+  });
+
+  EXPECT_FALSE(
+      data.database->ReadTwoViewGeometry(data.image_ids[0], data.image_ids[1])
+          .is_loop_closure);
+  EXPECT_TRUE(
+      data.database->ReadTwoViewGeometry(data.image_ids[0], data.image_ids[2])
+          .is_loop_closure);
+}
+
+TEST(FeatureMatcherController,
+     MatchWithProvenanceMergesTransitiveAndLcInliers) {
+  auto data = CreateTestData(3);
+  data.database->ClearMatches();
+  data.database->ClearTwoViewGeometries();
+
+  FeatureMatchingOptions matching_options = DefaultMatchingOptions();
+  TwoViewGeometryOptions geometry_options;
+  geometry_options.min_num_inliers = 1;
+
+  FeatureMatcherController controller(
+      matching_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  ASSERT_GE(data.image_ids.size(), 3);
+  const image_t image_id1 = data.image_ids[0];
+  const image_t image_id2 = data.image_ids[1];
+  const image_t image_id3 = data.image_ids[2];
+
+  controller.Match(
+      {{image_id1, image_id2}, {image_id2, image_id3}, {image_id1, image_id3}});
+
+  TwoViewGeometry tvg12 =
+      data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  TwoViewGeometry tvg23 =
+      data.database->ReadTwoViewGeometry(image_id2, image_id3);
+  ASSERT_FALSE(tvg12.inlier_matches.empty());
+  ASSERT_FALSE(tvg23.inlier_matches.empty());
+
+  FeatureMatch chain_match12;
+  FeatureMatch chain_match23;
+  bool found_chain = false;
+  for (const FeatureMatch& match12 : tvg12.inlier_matches) {
+    for (const FeatureMatch& match23 : tvg23.inlier_matches) {
+      if (match12.point2D_idx2 == match23.point2D_idx1) {
+        chain_match12 = match12;
+        chain_match23 = match23;
+        found_chain = true;
+        break;
+      }
+    }
+    if (found_chain) {
+      break;
+    }
+  }
+  ASSERT_TRUE(found_chain);
+
+  data.database->ClearTwoViewGeometries();
+  tvg12.inlier_matches = {chain_match12};
+  tvg12.inlier_matches_are_lc.clear();
+  tvg12.is_loop_closure = false;
+  data.cache->WriteTwoViewGeometry(image_id1, image_id2, tvg12);
+
+  tvg23.inlier_matches = {chain_match23};
+  tvg23.inlier_matches_are_lc.clear();
+  tvg23.is_loop_closure = false;
+  data.cache->WriteTwoViewGeometry(image_id2, image_id3, tvg23);
+
+  controller.MatchWithProvenance({{image_id1, image_id3, true}});
+
+  const auto tvg13 = data.database->ReadTwoViewGeometry(image_id1, image_id3);
+  ASSERT_EQ(tvg13.inlier_matches.size(), tvg13.inlier_matches_are_lc.size());
+  ASSERT_FALSE(tvg13.inlier_matches_are_lc.empty());
+  EXPECT_EQ(
+      tvg13.inlier_matches[0],
+      FeatureMatch(chain_match12.point2D_idx1, chain_match23.point2D_idx2));
+  EXPECT_FALSE(tvg13.inlier_matches_are_lc[0]);
+  bool seen_lc = false;
+  for (const bool is_lc : tvg13.inlier_matches_are_lc) {
+    if (is_lc) {
+      seen_lc = true;
+    } else {
+      EXPECT_FALSE(seen_lc);
+    }
+  }
+  EXPECT_TRUE(std::find(tvg13.inlier_matches_are_lc.begin(),
+                        tvg13.inlier_matches_are_lc.end(),
+                        true) != tvg13.inlier_matches_are_lc.end());
+  EXPECT_TRUE(tvg13.is_loop_closure);
 }
 
 TEST(GeometricVerifierController, OptionsAccessor) {
@@ -346,6 +684,177 @@ TEST(GeometricVerifierController, VerifyWithExistingMatches) {
 
   // All 6 pairs should now have TVGs
   EXPECT_EQ(data.database->ReadTwoViewGeometries().size(), 6);
+}
+
+TEST(GeometricVerifierController, VerifyMarksLoopClosure) {
+  auto data = CreateTestData(3);
+  const auto [image_id1, image_id2] = NonConsecutiveImagePair(*data.database);
+  MatchPairsWithoutVerification(data, {{image_id1, image_id2}});
+
+  GeometricVerifierOptions verifier_options;
+  verifier_options.num_threads = 1;
+  TwoViewGeometryOptions geometry_options;
+
+  GeometricVerifierController controller(
+      verifier_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  controller.Verify({{image_id1, image_id2}}, /*mark_as_loop_closure=*/true);
+
+  const auto tvg = data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  EXPECT_TRUE(tvg.is_loop_closure);
+}
+
+TEST(GeometricVerifierController, VerifyDoesNotMarkDirectPairAsLoopClosure) {
+  auto data = CreateTestData(3);
+  const auto [image_id1, image_id2] = ConsecutiveImagePair(*data.database);
+  MatchPairsWithoutVerification(data, {{image_id1, image_id2}});
+
+  GeometricVerifierOptions verifier_options;
+  verifier_options.num_threads = 1;
+  TwoViewGeometryOptions geometry_options;
+
+  GeometricVerifierController controller(
+      verifier_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  controller.Verify({{image_id1, image_id2}}, /*mark_as_loop_closure=*/true);
+
+  const auto tvg = data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  EXPECT_FALSE(tvg.is_loop_closure);
+  EXPECT_TRUE(tvg.inlier_matches_are_lc.empty());
+}
+
+TEST(GeometricVerifierController, VerifyDefaultDoesNotMarkLoopClosure) {
+  auto data = CreateTestData(3);
+  ASSERT_GE(data.image_ids.size(), 2);
+  MatchPairsWithoutVerification(data, {{data.image_ids[0], data.image_ids[1]}});
+
+  GeometricVerifierOptions verifier_options;
+  verifier_options.num_threads = 1;
+  TwoViewGeometryOptions geometry_options;
+
+  GeometricVerifierController controller(
+      verifier_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  controller.Verify({{data.image_ids[0], data.image_ids[1]}});
+
+  const auto tvg =
+      data.database->ReadTwoViewGeometry(data.image_ids[0], data.image_ids[1]);
+  EXPECT_FALSE(tvg.is_loop_closure);
+  EXPECT_TRUE(tvg.inlier_matches_are_lc.empty());
+}
+
+TEST(GeometricVerifierController,
+     VerifyLoopClosureBelowMinInliersDoesNotPersistLc) {
+  auto data = CreateTestData(3);
+  ASSERT_GE(data.image_ids.size(), 2);
+  MatchPairsWithoutVerification(data, {{data.image_ids[0], data.image_ids[1]}});
+
+  GeometricVerifierOptions verifier_options;
+  verifier_options.num_threads = 1;
+  TwoViewGeometryOptions geometry_options;
+  geometry_options.min_num_inliers = 1000000;
+
+  GeometricVerifierController controller(
+      verifier_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  controller.Verify({{data.image_ids[0], data.image_ids[1]}},
+                    /*mark_as_loop_closure=*/true);
+
+  const auto tvg =
+      data.database->ReadTwoViewGeometry(data.image_ids[0], data.image_ids[1]);
+  EXPECT_TRUE(tvg.inlier_matches.empty());
+  EXPECT_TRUE(tvg.inlier_matches_are_lc.empty());
+  EXPECT_FALSE(tvg.is_loop_closure);
+}
+
+TEST(GeometricVerifierController,
+     VerifyWithProvenanceUpgradesExistingNonLcPair) {
+  auto data = CreateTestData(3);
+  const auto [image_id1, image_id2] = NonConsecutiveImagePair(*data.database);
+  MatchPairsWithoutVerification(data, {{image_id1, image_id2}});
+
+  GeometricVerifierOptions verifier_options;
+  verifier_options.num_threads = 1;
+  TwoViewGeometryOptions geometry_options;
+
+  GeometricVerifierController controller(
+      verifier_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  controller.Verify({{image_id1, image_id2}});
+  ASSERT_FALSE(
+      data.database->ReadTwoViewGeometry(image_id1, image_id2).is_loop_closure);
+
+  controller.VerifyWithProvenance({{image_id1, image_id2, true}});
+
+  const auto tvg = data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  EXPECT_TRUE(tvg.is_loop_closure);
+  EXPECT_EQ(tvg.inlier_matches.size(), tvg.inlier_matches_are_lc.size());
+  EXPECT_TRUE(std::all_of(tvg.inlier_matches_are_lc.begin(),
+                          tvg.inlier_matches_are_lc.end(),
+                          [](const bool value) { return value; }));
+}
+
+TEST(GeometricVerifierController,
+     VerifyPreservesLegacyPairLevelLoopClosureProvenance) {
+  auto data = CreateTestData(3);
+  const auto [image_id1, image_id2] = NonConsecutiveImagePair(*data.database);
+  MatchPairsWithoutVerification(data, {{image_id1, image_id2}});
+
+  TwoViewGeometry prior =
+      data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  prior.is_loop_closure = true;
+  prior.inlier_matches_are_lc.clear();
+  data.database->UpdateTwoViewGeometry(image_id1, image_id2, prior);
+
+  GeometricVerifierOptions verifier_options;
+  verifier_options.num_threads = 1;
+  TwoViewGeometryOptions geometry_options;
+
+  GeometricVerifierController controller(
+      verifier_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  controller.VerifyWithProvenance({{image_id1, image_id2, true}});
+
+  const auto tvg = data.database->ReadTwoViewGeometry(image_id1, image_id2);
+  ASSERT_EQ(tvg.inlier_matches.size(), tvg.inlier_matches_are_lc.size());
+  EXPECT_TRUE(tvg.is_loop_closure);
+  EXPECT_TRUE(std::all_of(tvg.inlier_matches_are_lc.begin(),
+                          tvg.inlier_matches_are_lc.end(),
+                          [](const bool value) { return value; }));
+}
+
+TEST(GeometricVerifierController, VerifyWithProvenanceMarksMixedLoopClosures) {
+  auto data = CreateTestData(3);
+  ASSERT_GE(data.image_ids.size(), 3);
+  MatchPairsWithoutVerification(data,
+                                {{data.image_ids[0], data.image_ids[1]},
+                                 {data.image_ids[0], data.image_ids[2]}});
+
+  GeometricVerifierOptions verifier_options;
+  verifier_options.num_threads = 1;
+  TwoViewGeometryOptions geometry_options;
+
+  GeometricVerifierController controller(
+      verifier_options, geometry_options, data.cache);
+  ASSERT_TRUE(controller.Setup());
+
+  controller.VerifyWithProvenance({
+      {data.image_ids[0], data.image_ids[1], false},
+      {data.image_ids[0], data.image_ids[2], true},
+  });
+
+  EXPECT_FALSE(
+      data.database->ReadTwoViewGeometry(data.image_ids[0], data.image_ids[1])
+          .is_loop_closure);
+  EXPECT_TRUE(
+      data.database->ReadTwoViewGeometry(data.image_ids[0], data.image_ids[2])
+          .is_loop_closure);
 }
 
 }  // namespace

@@ -106,8 +106,10 @@ std::shared_ptr<Database> CreateTestDatabase() {
       Rigid3d(Eigen::Quaterniond::UnitRandom(), Eigen::Vector3d::Random());
   database->WriteTwoViewGeometry(
       image1.ImageId(), image2.ImageId(), two_view_geometry);
+  two_view_geometry.is_loop_closure = true;
   database->WriteTwoViewGeometry(
       image2.ImageId(), image3.ImageId(), two_view_geometry);
+  two_view_geometry.is_loop_closure = false;
   database->WriteTwoViewGeometry(
       image3.ImageId(), image4.ImageId(), two_view_geometry);
 
@@ -179,6 +181,41 @@ TEST(DatabaseCache, ConstructFromDatabase) {
       correspondence_graph->NumCorrespondencesForImage(images[3].ImageId()), 1);
   EXPECT_EQ(correspondence_graph->NumObservationsForImage(images[3].ImageId()),
             1);
+  const image_pair_t lc_pair_id =
+      ImagePairToPairId(images[1].ImageId(), images[2].ImageId());
+  EXPECT_EQ(correspondence_graph->ImagePairsMap().at(lc_pair_id).are_lc,
+            std::vector<bool>({true}));
+}
+
+TEST(DatabaseCache, ConstructFromDatabasePreservesMixedLoopClosureMask) {
+  auto database = Database::Open(kInMemorySqliteDatabasePath);
+  Camera camera = Camera::CreateFromModelId(
+      kInvalidCameraId, SimplePinholeCameraModel::model_id, 1, 1, 1);
+  camera.camera_id = database->WriteCamera(camera);
+
+  Image image1;
+  image1.SetName("image1");
+  image1.SetCameraId(camera.camera_id);
+  image1.SetImageId(database->WriteImage(image1));
+  Image image2;
+  image2.SetName("image2");
+  image2.SetCameraId(camera.camera_id);
+  image2.SetImageId(database->WriteImage(image2));
+
+  database->WriteKeypoints(image1.ImageId(), FeatureKeypoints(3));
+  database->WriteKeypoints(image2.ImageId(), FeatureKeypoints(3));
+
+  TwoViewGeometry two_view_geometry;
+  two_view_geometry.inlier_matches = {{0, 0}, {1, 1}, {2, 2}};
+  two_view_geometry.inlier_matches_are_lc = {true, false, true};
+  database->WriteTwoViewGeometry(
+      image1.ImageId(), image2.ImageId(), two_view_geometry);
+
+  auto cache = DatabaseCache::Create(*database, {});
+  const image_pair_t pair_id =
+      ImagePairToPairId(image1.ImageId(), image2.ImageId());
+  EXPECT_EQ(cache->CorrespondenceGraph()->ImagePairsMap().at(pair_id).are_lc,
+            std::vector<bool>({true, false, true}));
 }
 
 TEST(DatabaseCache, ConstructFromDatabaseWithCustomImages) {

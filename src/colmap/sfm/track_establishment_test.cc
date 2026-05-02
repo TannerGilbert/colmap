@@ -457,6 +457,71 @@ TEST(ProcessLoopClosurePairs, OneExistingTrack) {
   EXPECT_FALSE(TrackHasElement(tracks.at(0).track, 4, 0));
 }
 
+TEST(ProcessLoopClosurePairs, OneExistingTrackClaimsOrphanEndpoint) {
+  CorrespondenceGraph corr_graph;
+  corr_graph.AddImage(1, 5);
+  corr_graph.AddImage(2, 5);
+  corr_graph.AddImage(4, 5);
+
+  // First LC row claims img4:0 as an LC-only observation on track 0.
+  // The second row tries to attach the same img4:0 to track 1; this must not
+  // duplicate the LC observation across tracks.
+  AddLCOnlyPair(corr_graph, 1, 4, {{0, 0}}, {0});
+  AddLCOnlyPair(corr_graph, 2, 4, {{0, 0}}, {0});
+
+  std::unordered_map<point3D_t, Point3D> tracks;
+  {
+    Point3D p;
+    p.track.AddElement(1, 0);
+    p.track.AddElement(3, 0);
+    tracks.emplace(0, std::move(p));
+  }
+  {
+    Point3D p;
+    p.track.AddElement(2, 0);
+    p.track.AddElement(3, 1);
+    tracks.emplace(1, std::move(p));
+  }
+
+  std::vector<image_pair_t> pair_ids = {ImagePairToPairId(1, 4),
+                                        ImagePairToPairId(2, 4)};
+  AppendLoopClosureObservations(pair_ids, corr_graph, tracks);
+
+  EXPECT_EQ(tracks.size(), 2u);
+  EXPECT_TRUE(TrackHasLCElement(tracks.at(0).track, 4, 0));
+  EXPECT_FALSE(TrackHasLCElement(tracks.at(1).track, 4, 0));
+  EXPECT_FALSE(TrackHasLCElement(tracks.at(0).track, 2, 0));
+  EXPECT_FALSE(TrackHasElement(tracks.at(0).track, 4, 0));
+}
+
+TEST(ProcessLoopClosurePairs, ReversedImagePairOrderUsesStoredMatchColumns) {
+  CorrespondenceGraph corr_graph;
+  corr_graph.AddImage(1, 10);
+  corr_graph.AddImage(2, 10);
+  corr_graph.AddImage(4, 10);
+
+  // Native track endpoint: img1:7 <-> img2:7.
+  AddImagePairWithLC(corr_graph, 1, 2, {{7, 7}}, {0}, {});
+
+  // In-memory/pycolmap-style LC pair stored in reverse endpoint order. Match
+  // columns follow ImagePair.image_id1/image_id2, so this is
+  // img4:2 <-> img1:7 even though the map key is canonical pair (1,4).
+  AddLCOnlyPair(corr_graph, 4, 1, {{2, 7}}, {0});
+
+  const auto kps = MakeWellSeparatedKeypoints({1, 2, 4}, 10);
+  TrackEstablishmentOptions opts;
+  opts.min_num_views_per_track = 2;
+  const auto tracks = EstablishFullTracks(corr_graph, kps, opts);
+
+  ASSERT_EQ(tracks.size(), 1u);
+  const Track& track = tracks.begin()->second.track;
+  EXPECT_TRUE(TrackHasElement(track, 1, 7));
+  EXPECT_TRUE(TrackHasElement(track, 2, 7));
+  EXPECT_TRUE(TrackHasLCElement(track, 4, 2));
+  EXPECT_FALSE(TrackHasElement(track, 4, 2));
+  EXPECT_FALSE(TrackHasLCElement(track, 4, 7));
+}
+
 // Both LC endpoints are orphan (neither on any track). Expect 2 new tracks
 // minted, each with 1 regular element + the other side as lc_element.
 //

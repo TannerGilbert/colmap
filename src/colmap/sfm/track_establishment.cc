@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <memory>
 #include <set>
+#include <unordered_set>
 #include <utility>
 
 namespace colmap {
@@ -35,6 +36,16 @@ void ValidateLoopClosureImagePairMetadata(
   }
 }
 
+void AddLoopClosureElementIfNew(Track& track,
+                                const image_t image_id,
+                                const point2D_t point2D_idx) {
+  const TrackElement element(image_id, point2D_idx);
+  if (std::find(track.lc_elements.begin(), track.lc_elements.end(), element) ==
+      track.lc_elements.end()) {
+    track.lc_elements.emplace_back(element);
+  }
+}
+
 }  // namespace
 
 MatchPredicate MakeLoopClosureMatchPredicate(
@@ -48,8 +59,9 @@ MatchPredicate MakeLoopClosureMatchPredicate(
   for (const image_pair_t pair_id : valid_pair_ids) {
     const auto it = corr_graph.ImagePairsMap().find(pair_id);
     if (it == corr_graph.ImagePairsMap().end()) continue;
-    const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
     const auto& image_pair = it->second;
+    const image_t image_id1 = image_pair.image_id1;
+    const image_t image_id2 = image_pair.image_id2;
     ValidateLoopClosureImagePairMetadata(pair_id, image_pair);
     const Eigen::MatrixXi& matches = image_pair.matches;
     const std::vector<int>& inliers = image_pair.inliers;
@@ -90,12 +102,13 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
   UnionFind<Observation> uf;
   FeatureMatches extracted_matches;
   for (const image_pair_t pair_id : valid_pair_ids) {
-    const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
+    const auto& image_pair = corr_graph.ImagePairsMap().at(pair_id);
+    const image_t image_id1 = image_pair.image_id1;
+    const image_t image_id2 = image_pair.image_id2;
     THROW_CHECK(image_id_to_keypoints.count(image_id1))
         << "Missing keypoints for image " << image_id1;
     THROW_CHECK(image_id_to_keypoints.count(image_id2))
         << "Missing keypoints for image " << image_id2;
-    const auto& image_pair = corr_graph.ImagePairsMap().at(pair_id);
     const Eigen::MatrixXi& matches = image_pair.matches;
     const auto union_match = [&](const point2D_t p2d1, const point2D_t p2d2) {
       if (ignore_match && ignore_match(image_id1, p2d1, image_id2, p2d2)) {
@@ -233,12 +246,14 @@ void AppendLoopClosureObservations(
   // collide with the dense [0, N) ids written by
   // EstablishTracksFromCorrGraph.
   std::unordered_map<uint64_t, point3D_t> obs_to_track;
+  std::unordered_set<uint64_t> regular_observations;
   point3D_t next_id = 0;
   for (const auto& [track_id, point3D] : tracks) {
     next_id = std::max(next_id, static_cast<point3D_t>(track_id + 1));
     for (const auto& el : point3D.track.Elements()) {
-      obs_to_track.emplace(EncodeObservationKey(el.image_id, el.point2D_idx),
-                           track_id);
+      const uint64_t key = EncodeObservationKey(el.image_id, el.point2D_idx);
+      obs_to_track.emplace(key, track_id);
+      regular_observations.insert(key);
     }
   }
 
@@ -259,7 +274,8 @@ void AppendLoopClosureObservations(
     }
     if (!has_lc) continue;
 
-    const auto [image_id1, image_id2] = PairIdToImagePair(pair_id);
+    const image_t image_id1 = image_pair.image_id1;
+    const image_t image_id2 = image_pair.image_id2;
 
     for (const int idx : inliers) {
       if (!are_lc[idx]) {
@@ -297,21 +313,28 @@ void AppendLoopClosureObservations(
             << " — sequential id minting violated unexpectedly";
         obs_to_track[key1] = tid_a;
         obs_to_track[key2] = tid_b;
+        regular_observations.insert(key1);
+        regular_observations.insert(key2);
         continue;
       }
       if (has_track1 && has_track2) {
         const point3D_t t1 = it1->second;
         const point3D_t t2 = it2->second;
-        if (t1 != t2) {
-          tracks.at(t1).track.lc_elements.emplace_back(image_id2, p2);
-          tracks.at(t2).track.lc_elements.emplace_back(image_id1, p1);
+        if (t1 != t2 && regular_observations.count(key1) > 0 &&
+            regular_observations.count(key2) > 0) {
+          AddLoopClosureElementIfNew(tracks.at(t1).track, image_id2, p2);
+          AddLoopClosureElementIfNew(tracks.at(t2).track, image_id1, p1);
         }
         continue;
       }
-      if (has_track1) {
-        tracks.at(it1->second).track.lc_elements.emplace_back(image_id2, p2);
-      } else {
-        tracks.at(it2->second).track.lc_elements.emplace_back(image_id1, p1);
+      if (has_track1 && regular_observations.count(key1) > 0) {
+        const point3D_t track_id = it1->second;
+        AddLoopClosureElementIfNew(tracks.at(track_id).track, image_id2, p2);
+        obs_to_track[key2] = track_id;
+      } else if (has_track2 && regular_observations.count(key2) > 0) {
+        const point3D_t track_id = it2->second;
+        AddLoopClosureElementIfNew(tracks.at(track_id).track, image_id1, p1);
+        obs_to_track[key1] = track_id;
       }
     }
   }

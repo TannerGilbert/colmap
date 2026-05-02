@@ -44,6 +44,8 @@ TEST(TwoViewGeometry, Default) {
   EXPECT_FALSE(two_view_geometry.H.has_value());
   EXPECT_FALSE(two_view_geometry.cam2_from_cam1.has_value());
   EXPECT_TRUE(two_view_geometry.inlier_matches.empty());
+  EXPECT_TRUE(two_view_geometry.inlier_matches_are_lc.empty());
+  EXPECT_FALSE(two_view_geometry.is_loop_closure);
 }
 
 TEST(TwoViewGeometry, Invert) {
@@ -54,12 +56,15 @@ TEST(TwoViewGeometry, Invert) {
   two_view_geometry.H = Eigen::Matrix3d::Identity();
   two_view_geometry.cam2_from_cam1 =
       Rigid3d(Eigen::Quaterniond::Identity(), Eigen::Vector3d(0, 1, 2));
+  two_view_geometry.is_loop_closure = true;
   two_view_geometry.inlier_matches.resize(2);
   two_view_geometry.inlier_matches[0] = FeatureMatch(0, 1);
   two_view_geometry.inlier_matches[1] = FeatureMatch(2, 3);
+  two_view_geometry.inlier_matches_are_lc = {true, false};
 
   two_view_geometry.Invert();
   EXPECT_EQ(two_view_geometry.config, TwoViewGeometry::CALIBRATED);
+  EXPECT_TRUE(two_view_geometry.is_loop_closure);
   EXPECT_THAT(two_view_geometry.F.value(),
               EigenMatrixNear<Eigen::Matrix3d>(Eigen::Matrix3d::Identity()));
   EXPECT_THAT(two_view_geometry.E.value(),
@@ -75,9 +80,12 @@ TEST(TwoViewGeometry, Invert) {
   EXPECT_EQ(two_view_geometry.inlier_matches[0].point2D_idx2, 0);
   EXPECT_EQ(two_view_geometry.inlier_matches[1].point2D_idx1, 3);
   EXPECT_EQ(two_view_geometry.inlier_matches[1].point2D_idx2, 2);
+  EXPECT_EQ(two_view_geometry.inlier_matches_are_lc,
+            std::vector<bool>({true, false}));
 
   two_view_geometry.Invert();
   EXPECT_EQ(two_view_geometry.config, TwoViewGeometry::CALIBRATED);
+  EXPECT_TRUE(two_view_geometry.is_loop_closure);
   EXPECT_THAT(two_view_geometry.F.value(),
               EigenMatrixNear<Eigen::Matrix3d>(Eigen::Matrix3d::Identity()));
   EXPECT_THAT(two_view_geometry.E.value(),
@@ -93,6 +101,8 @@ TEST(TwoViewGeometry, Invert) {
   EXPECT_EQ(two_view_geometry.inlier_matches[0].point2D_idx2, 1);
   EXPECT_EQ(two_view_geometry.inlier_matches[1].point2D_idx1, 2);
   EXPECT_EQ(two_view_geometry.inlier_matches[1].point2D_idx2, 3);
+  EXPECT_EQ(two_view_geometry.inlier_matches_are_lc,
+            std::vector<bool>({true, false}));
 }
 
 }  // namespace

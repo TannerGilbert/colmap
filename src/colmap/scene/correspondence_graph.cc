@@ -112,6 +112,12 @@ void CorrespondenceGraph::AddTwoViewGeometry(
   // Corresponding images.
   struct Image& image1 = images_.at(image_id1);
   struct Image& image2 = images_.at(image_id2);
+  const bool has_inlier_matches_are_lc =
+      !two_view_geometry.inlier_matches_are_lc.empty();
+  if (has_inlier_matches_are_lc) {
+    THROW_CHECK_EQ(two_view_geometry.inlier_matches_are_lc.size(),
+                   two_view_geometry.inlier_matches.size());
+  }
 
   // Store number of correspondences for each image to find good initial pair.
   image1.num_correspondences += two_view_geometry.inlier_matches.size();
@@ -137,8 +143,11 @@ void CorrespondenceGraph::AddTwoViewGeometry(
   // observation is triangulated.
 
   FeatureMatches stored_inlier_matches;
+  std::vector<bool> stored_inlier_matches_are_lc;
   stored_inlier_matches.reserve(two_view_geometry.inlier_matches.size());
-  for (const auto& match : two_view_geometry.inlier_matches) {
+  stored_inlier_matches_are_lc.reserve(two_view_geometry.inlier_matches.size());
+  for (size_t i = 0; i < two_view_geometry.inlier_matches.size(); ++i) {
+    const auto& match = two_view_geometry.inlier_matches[i];
     const bool valid_idx1 = match.point2D_idx1 < image1.corrs.size();
     const bool valid_idx2 = match.point2D_idx2 < image2.corrs.size();
 
@@ -179,6 +188,10 @@ void CorrespondenceGraph::AddTwoViewGeometry(
           image2.num_observations += 1;
         }
         stored_inlier_matches.push_back(match);
+        stored_inlier_matches_are_lc.push_back(
+            has_inlier_matches_are_lc
+                ? two_view_geometry.inlier_matches_are_lc[i]
+                : two_view_geometry.is_loop_closure);
       }
     } else {
       image1.num_correspondences -= 1;
@@ -200,7 +213,7 @@ void CorrespondenceGraph::AddTwoViewGeometry(
   }
   image_pair.matches.resize(static_cast<int>(stored_inlier_matches.size()), 2);
   image_pair.inliers.resize(stored_inlier_matches.size());
-  image_pair.are_lc.assign(stored_inlier_matches.size(), false);
+  image_pair.are_lc = std::move(stored_inlier_matches_are_lc);
   for (size_t i = 0; i < stored_inlier_matches.size(); ++i) {
     image_pair.matches(static_cast<int>(i), 0) =
         stored_inlier_matches[i].point2D_idx1;
@@ -211,6 +224,7 @@ void CorrespondenceGraph::AddTwoViewGeometry(
 
   // Clear and deallocate matches.
   FeatureMatches().swap(two_view_geometry.inlier_matches);
+  std::vector<bool>().swap(two_view_geometry.inlier_matches_are_lc);
 
   if (ShouldSwapImagePair(image_id1, image_id2)) {
     two_view_geometry.Invert();
@@ -347,8 +361,25 @@ struct TwoViewGeometry CorrespondenceGraph::ExtractTwoViewGeometry(
   }
   // Extract after inversion, as they are extracted in the correct order.
   if (extract_inlier_matches) {
-    ExtractMatchesBetweenImages(
-        image_id1, image_id2, two_view_geometry.inlier_matches);
+    const auto& image_pair = image_pair_it->second;
+    THROW_CHECK_EQ(image_pair.are_lc.size(),
+                   static_cast<size_t>(image_pair.matches.rows()));
+    const bool stored_order =
+        image_id1 == image_pair.image_id1 && image_id2 == image_pair.image_id2;
+    const bool reversed_order =
+        image_id1 == image_pair.image_id2 && image_id2 == image_pair.image_id1;
+    THROW_CHECK(stored_order || reversed_order);
+    two_view_geometry.inlier_matches.reserve(image_pair.are_lc.size());
+    two_view_geometry.inlier_matches_are_lc = image_pair.are_lc;
+    for (Eigen::Index i = 0; i < image_pair.matches.rows(); ++i) {
+      if (stored_order) {
+        two_view_geometry.inlier_matches.emplace_back(image_pair.matches(i, 0),
+                                                      image_pair.matches(i, 1));
+      } else {
+        two_view_geometry.inlier_matches.emplace_back(image_pair.matches(i, 1),
+                                                      image_pair.matches(i, 0));
+      }
+    }
   }
   return two_view_geometry;
 }
@@ -361,6 +392,7 @@ void CorrespondenceGraph::UpdateTwoViewGeometry(
   auto image_pair_it = image_pairs_.find(pair_id);
   THROW_CHECK(image_pair_it != image_pairs_.end());
   FeatureMatches().swap(two_view_geometry.inlier_matches);
+  std::vector<bool>().swap(two_view_geometry.inlier_matches_are_lc);
   if (ShouldSwapImagePair(image_id1, image_id2)) {
     two_view_geometry.Invert();
   }

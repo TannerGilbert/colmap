@@ -15,6 +15,92 @@ COLMAP, please also cite the original authors, as specified in the source code,
 and consider citing relevant third-party dependencies (most notably
 ceres-solver, poselib, sift-gpu, vlfeat).
 
+Native Sequential LC Branch
+---------------------------
+
+This branch is for a student/internal native COLMAP loop-closure workflow. It is
+not proposed upstream COLMAP behavior. The branch keeps the normal sequential
+matching workflow, but can mark selected verified pairs as loop closures in the
+database so downstream experiments can distinguish local tracking pairs from LC
+pairs.
+
+Build from the repository root:
+
+    bash scripts/build_cpp.sh
+
+Minimal CLI workflow:
+
+    COLMAP="$PWD/local/bin/colmap"
+    DB=/path/to/database.db
+    IMAGES=/path/to/images
+    SPARSE=/path/to/sparse
+    VOCAB_TREE=/path/to/vocab_tree.bin
+
+    "$COLMAP" feature_extractor \
+        --database_path "$DB" \
+        --image_path "$IMAGES"
+
+    "$COLMAP" sequential_matcher \
+        --database_path "$DB" \
+        --SequentialMatching.overlap 10 \
+        --SequentialMatching.loop_detection 1 \
+        --SequentialMatching.vocab_tree_path "$VOCAB_TREE" \
+        --SequentialMatching.loop_detection_period 10 \
+        --SequentialMatching.loop_detection_num_images 50 \
+        --SequentialMatching.mark_loop_detection_as_lc 1 \
+        --SequentialMatching.mark_non_consecutive_as_lc 1
+
+    mkdir -p "$SPARSE"
+    "$COLMAP" global_mapper \
+        --database_path "$DB" \
+        --image_path "$IMAGES" \
+        --output_path "$SPARSE" \
+        --GlobalMapper.track_lc_second_pass 1 \
+        --GlobalMapper.gp_use_lc_observations 1
+
+The LC-specific flags are:
+
+* ``SequentialMatching.loop_detection`` enables vocabulary-tree loop detection
+  inside the sequential matcher.
+* ``SequentialMatching.vocab_tree_path`` points to the vocabulary tree used for
+  retrieval.
+* ``SequentialMatching.loop_detection_period`` runs loop detection every N
+  images.
+* ``SequentialMatching.loop_detection_num_images`` is the number of retrieved
+  candidate images before optional spatial-verification pruning.
+* ``SequentialMatching.mark_loop_detection_as_lc`` stores verified
+  loop-detection pairs as LC provenance in ``two_view_geometries``.
+* ``SequentialMatching.mark_non_consecutive_as_lc`` also marks non-consecutive
+  sequential-overlap pairs as LC candidates; consecutive neighbors remain normal
+  local pairs.
+* ``GlobalMapper.track_lc_second_pass`` appends LC observations to established
+  tracks after the regular tracking pass.
+* ``GlobalMapper.gp_use_lc_observations`` lets global positioning consume those
+  LC observations.
+
+Inspect LC provenance with SQLite:
+
+    sqlite3 "$DB" \
+        "SELECT is_loop_closure, COUNT(*) FROM two_view_geometries GROUP BY is_loop_closure;"
+
+    sqlite3 "$DB" \
+        "SELECT COUNT(*) FROM two_view_geometries WHERE is_loop_closure = 1;"
+
+To list a few LC image pairs by name:
+
+    sqlite3 "$DB" "
+    SELECT i1.name, i2.name
+    FROM two_view_geometries AS tvg
+    JOIN images AS i1
+      ON i1.image_id = CAST(tvg.pair_id / 2147483647 AS INTEGER)
+    JOIN images AS i2
+      ON i2.image_id = tvg.pair_id % 2147483647
+    WHERE tvg.is_loop_closure = 1
+    LIMIT 20;"
+
+For mixed-provenance pairs, ``inlier_matches_are_lc`` contains one byte per
+inlier match. Most quick checks only need ``is_loop_closure``.
+
 Download
 --------
 

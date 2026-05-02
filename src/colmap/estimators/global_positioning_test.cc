@@ -41,6 +41,19 @@
 namespace colmap {
 namespace {
 
+class TestGlobalPositioner : public GlobalPositioner {
+ public:
+  using GlobalPositioner::GlobalPositioner;
+
+  size_t BuildProblemAndCountResiduals(const PoseGraph& pose_graph,
+                                       Reconstruction& reconstruction) {
+    SetupProblem(pose_graph, reconstruction);
+    InitializeRandomPositions(pose_graph, reconstruction);
+    AddPointToCameraConstraints(reconstruction);
+    return problem_->NumResidualBlocks();
+  }
+};
+
 TEST(GlobalPositioning, Nominal) {
   SetPRNGSeed(0);
 
@@ -87,6 +100,59 @@ TEST(GlobalPositioning, Nominal) {
                                  /*max_proj_center_error=*/0.5,
                                  /*max_scale_error=*/std::nullopt,
                                  /*num_obs_tolerance=*/0.0));
+}
+
+TEST(GlobalPositioning, UseLcObservationsAddsLcResiduals) {
+  SetPRNGSeed(0);
+
+  const auto database_path = CreateTestDir() / "database.db";
+
+  auto database = Database::Open(database_path);
+  Reconstruction reconstruction;
+  SyntheticDatasetOptions synthetic_dataset_options;
+  synthetic_dataset_options.num_rigs = 1;
+  synthetic_dataset_options.num_cameras_per_rig = 1;
+  synthetic_dataset_options.num_frames_per_rig = 5;
+  synthetic_dataset_options.num_points3D = 50;
+  synthetic_dataset_options.two_view_geometry_has_relative_pose = true;
+  SynthesizeDataset(synthetic_dataset_options, &reconstruction, database.get());
+
+  DatabaseCache database_cache;
+  DatabaseCache::Options cache_options;
+  database_cache.Load(*database, cache_options);
+
+  PoseGraph pose_graph;
+  pose_graph.Load(*database_cache.CorrespondenceGraph());
+
+  size_t num_lc_observations = 0;
+  for (const auto& [point3D_id, point3D_const] : reconstruction.Points3D()) {
+    Point3D& point3D = reconstruction.Point3D(point3D_id);
+    if (point3D.track.Length() == 0) continue;
+    point3D.track.lc_elements.push_back(point3D.track.Elements().front());
+    ++num_lc_observations;
+  }
+  ASSERT_GT(num_lc_observations, 0u);
+
+  GlobalPositionerOptions options;
+  options.use_gpu = false;
+  options.use_init = true;
+  options.generate_random_positions = false;
+  options.generate_random_points = false;
+  options.min_num_view_per_track = 1;
+  options.solver_options.minimizer_progress_to_stdout = false;
+
+  options.use_lc_observations = false;
+  TestGlobalPositioner regular_positioner(options);
+  const size_t num_regular_residuals =
+      regular_positioner.BuildProblemAndCountResiduals(pose_graph,
+                                                       reconstruction);
+
+  options.use_lc_observations = true;
+  TestGlobalPositioner lc_positioner(options);
+  const size_t num_lc_residuals =
+      lc_positioner.BuildProblemAndCountResiduals(pose_graph, reconstruction);
+
+  EXPECT_EQ(num_lc_residuals, num_regular_residuals + num_lc_observations);
 }
 
 TEST(GlobalPositioning, MultiCameraRig) {

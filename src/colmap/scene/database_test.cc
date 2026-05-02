@@ -40,6 +40,7 @@
 #include <Eigen/Geometry>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <sqlite3.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -51,6 +52,43 @@ namespace {
 class ParameterizedDatabaseTests
     : public ::testing::TestWithParam<std::function<std::shared_ptr<Database>(
           const std::filesystem::path&)>> {};
+
+void ExecSqlite(sqlite3* database, const std::string& sql) {
+  char* err_msg = nullptr;
+  ASSERT_EQ(sqlite3_exec(database, sql.c_str(), nullptr, nullptr, &err_msg),
+            SQLITE_OK)
+      << (err_msg != nullptr ? err_msg : "");
+  sqlite3_free(err_msg);
+}
+
+void CreateLegacyTwoViewGeometryDatabase(
+    const std::filesystem::path& database_path) {
+  sqlite3* database = nullptr;
+  ASSERT_EQ(sqlite3_open_v2(database_path.string().c_str(),
+                            &database,
+                            SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE,
+                            nullptr),
+            SQLITE_OK);
+
+  ExecSqlite(database,
+             "CREATE TABLE two_view_geometries"
+             "   (pair_id  INTEGER PRIMARY KEY NOT NULL,"
+             "    rows     INTEGER NOT NULL,"
+             "    cols     INTEGER NOT NULL,"
+             "    data     BLOB,"
+             "    config   INTEGER NOT NULL,"
+             "    F        BLOB,"
+             "    E        BLOB,"
+             "    H        BLOB,"
+             "    qvec     BLOB,"
+             "    tvec     BLOB);");
+  ExecSqlite(database,
+             "INSERT INTO two_view_geometries"
+             "(pair_id, rows, cols, data, config) VALUES(" +
+                 std::to_string(ImagePairToPairId(1, 2)) + ", 0, 2, X'', 0);");
+
+  ASSERT_EQ(sqlite3_close_v2(database), SQLITE_OK);
+}
 
 TEST_P(ParameterizedDatabaseTests, OpenInMemory) {
   std::shared_ptr<Database> database = GetParam()(kInMemorySqliteDatabasePath);
@@ -498,6 +536,11 @@ TEST_P(ParameterizedDatabaseTests, TwoViewGeometry) {
   const image_t image_id2 = 2;
   TwoViewGeometry two_view_geometry;
   two_view_geometry.inlier_matches = FeatureMatches(1000);
+  two_view_geometry.inlier_matches_are_lc.resize(
+      two_view_geometry.inlier_matches.size());
+  for (size_t i = 0; i < two_view_geometry.inlier_matches_are_lc.size(); ++i) {
+    two_view_geometry.inlier_matches_are_lc[i] = i % 3 == 0;
+  }
   two_view_geometry.config =
       TwoViewGeometry::ConfigurationType::PLANAR_OR_PANORAMIC;
   two_view_geometry.F = Eigen::Matrix3d::Random();
@@ -505,6 +548,7 @@ TEST_P(ParameterizedDatabaseTests, TwoViewGeometry) {
   two_view_geometry.H = Eigen::Matrix3d::Random();
   two_view_geometry.cam2_from_cam1 =
       Rigid3d(Eigen::Quaterniond::UnitRandom(), Eigen::Vector3d::Random());
+  two_view_geometry.is_loop_closure = true;
   database->WriteTwoViewGeometry(image_id1, image_id2, two_view_geometry);
   const TwoViewGeometry two_view_geometry_read =
       database->ReadTwoViewGeometry(image_id1, image_id2);
@@ -527,6 +571,9 @@ TEST_P(ParameterizedDatabaseTests, TwoViewGeometry) {
             two_view_geometry_read.cam2_from_cam1->rotation().coeffs());
   EXPECT_EQ(two_view_geometry.cam2_from_cam1->translation(),
             two_view_geometry_read.cam2_from_cam1->translation());
+  EXPECT_TRUE(two_view_geometry_read.is_loop_closure);
+  EXPECT_EQ(two_view_geometry_read.inlier_matches_are_lc,
+            two_view_geometry.inlier_matches_are_lc);
 
   const TwoViewGeometry two_view_geometry_read_inv =
       database->ReadTwoViewGeometry(image_id2, image_id1);
@@ -551,6 +598,9 @@ TEST_P(ParameterizedDatabaseTests, TwoViewGeometry) {
       Inverse(*two_view_geometry_read.cam2_from_cam1).rotation()));
   EXPECT_TRUE(two_view_geometry_read_inv.cam2_from_cam1->translation().isApprox(
       Inverse(*two_view_geometry_read.cam2_from_cam1).translation()));
+  EXPECT_TRUE(two_view_geometry_read_inv.is_loop_closure);
+  EXPECT_EQ(two_view_geometry_read_inv.inlier_matches_are_lc,
+            two_view_geometry.inlier_matches_are_lc);
 
   const std::vector<std::pair<image_pair_t, TwoViewGeometry>>
       two_view_geometries = database->ReadTwoViewGeometries();
@@ -566,8 +616,11 @@ TEST_P(ParameterizedDatabaseTests, TwoViewGeometry) {
             two_view_geometries[0].second.cam2_from_cam1->rotation().coeffs());
   EXPECT_EQ(two_view_geometry.cam2_from_cam1->translation(),
             two_view_geometries[0].second.cam2_from_cam1->translation());
+  EXPECT_TRUE(two_view_geometries[0].second.is_loop_closure);
   EXPECT_EQ(two_view_geometry.inlier_matches.size(),
             two_view_geometries[0].second.inlier_matches.size());
+  EXPECT_EQ(two_view_geometries[0].second.inlier_matches_are_lc,
+            two_view_geometry.inlier_matches_are_lc);
   const std::vector<std::pair<image_pair_t, int>> pair_ids_and_num_inliers =
       database->ReadTwoViewGeometryNumInliers();
   EXPECT_EQ(pair_ids_and_num_inliers.size(), 1);
@@ -578,6 +631,10 @@ TEST_P(ParameterizedDatabaseTests, TwoViewGeometry) {
   EXPECT_EQ(database->NumInlierMatches(), 1000);
   database->DeleteInlierMatches(image_id1, image_id2);
   EXPECT_TRUE(database->ExistsTwoViewGeometry(image_id1, image_id2));
+  EXPECT_TRUE(
+      database->ReadTwoViewGeometry(image_id1, image_id2).is_loop_closure);
+  EXPECT_TRUE(database->ReadTwoViewGeometry(image_id1, image_id2)
+                  .inlier_matches_are_lc.empty());
   EXPECT_EQ(database->NumInlierMatches(), 0);
   database->DeleteTwoViewGeometry(image_id1, image_id2);
   EXPECT_FALSE(database->ExistsTwoViewGeometry(image_id1, image_id2));
@@ -589,9 +646,17 @@ TEST_P(ParameterizedDatabaseTests, TwoViewGeometry) {
   database->ClearTwoViewGeometries();
   EXPECT_EQ(database->NumInlierMatches(), 0);
   two_view_geometry.inlier_matches.clear();
+  two_view_geometry.inlier_matches_are_lc.clear();
   database->WriteTwoViewGeometry(image_id1, image_id2, two_view_geometry);
   EXPECT_EQ(two_view_geometry.cam2_from_cam1,
             database->ReadTwoViewGeometry(image_id1, image_id2).cam2_from_cam1);
+
+  database->ClearTwoViewGeometries();
+  TwoViewGeometry two_view_geometry_bad_mask;
+  two_view_geometry_bad_mask.inlier_matches = FeatureMatches(2);
+  two_view_geometry_bad_mask.inlier_matches_are_lc = {true};
+  EXPECT_ANY_THROW(database->WriteTwoViewGeometry(
+      image_id1, image_id2, two_view_geometry_bad_mask));
 
   // Test with E and F set, but H missing.
   database->ClearTwoViewGeometries();
@@ -609,6 +674,33 @@ TEST_P(ParameterizedDatabaseTests, TwoViewGeometry) {
   EXPECT_EQ(two_view_geometry_no_h.E, two_view_geometry_no_h_read.E);
   EXPECT_EQ(two_view_geometry_no_h.F, two_view_geometry_no_h_read.F);
   EXPECT_FALSE(two_view_geometry_no_h_read.H.has_value());
+}
+
+TEST_P(ParameterizedDatabaseTests, TwoViewGeometryLoopClosureMigration) {
+  const auto database_path = CreateTestDir() / "legacy_database.db";
+  CreateLegacyTwoViewGeometryDatabase(database_path);
+
+  std::shared_ptr<Database> database = GetParam()(database_path);
+  EXPECT_FALSE(database->ReadTwoViewGeometry(1, 2).is_loop_closure);
+  EXPECT_TRUE(
+      database->ReadTwoViewGeometry(1, 2).inlier_matches_are_lc.empty());
+
+  database->DeleteTwoViewGeometry(1, 2);
+  TwoViewGeometry two_view_geometry;
+  two_view_geometry.is_loop_closure = true;
+  two_view_geometry.inlier_matches = FeatureMatches(1);
+  two_view_geometry.inlier_matches_are_lc = {false};
+  database->WriteTwoViewGeometry(1, 2, two_view_geometry);
+
+  EXPECT_TRUE(database->ReadTwoViewGeometry(1, 2).is_loop_closure);
+  EXPECT_EQ(database->ReadTwoViewGeometry(1, 2).inlier_matches_are_lc,
+            std::vector<bool>({false}));
+
+  database.reset();
+  database = GetParam()(database_path);
+  EXPECT_TRUE(database->ReadTwoViewGeometry(1, 2).is_loop_closure);
+  EXPECT_EQ(database->ReadTwoViewGeometry(1, 2).inlier_matches_are_lc,
+            std::vector<bool>({false}));
 }
 
 TEST_P(ParameterizedDatabaseTests, Merge) {

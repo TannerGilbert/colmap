@@ -43,9 +43,18 @@ namespace colmap {
 struct FeatureMatcherData {
   image_t image_id1 = kInvalidImageId;
   image_t image_id2 = kInvalidImageId;
+  bool is_loop_closure = false;
   FeatureMatches matches;
   TwoViewGeometry two_view_geometry;
 };
+
+// Merge transitive/direct-chain inliers with newly matched LC-candidate
+// inliers. Transitive rows are emitted first and marked non-LC. Candidate rows
+// are appended and marked LC only when both endpoints are unused.
+void MergeLoopClosureInlierMatches(const FeatureMatches& transitive_matches,
+                                   const FeatureMatches& candidate_matches,
+                                   FeatureMatches* merged_matches,
+                                   std::vector<bool>* merged_matches_are_lc);
 
 class FeatureMatcherWorker : public Thread {
  public:
@@ -87,7 +96,13 @@ class FeatureMatcherController {
   bool Setup();
 
   // Match one batch of multiple image pairs.
-  void Match(const std::vector<std::pair<image_t, image_t>>& image_pairs);
+  void Match(const std::vector<std::pair<image_t, image_t>>& image_pairs,
+             bool mark_as_loop_closure = false);
+  // Match pairs with pair-level provenance. The current database stores one
+  // loop-closure bit per two-view geometry; mixed per-match provenance for the
+  // same image pair must be merged before this boundary.
+  void MatchWithProvenance(
+      const std::vector<FeatureMatcherImagePair>& image_pairs);
 
  private:
   FeatureMatchingOptions matching_options_;
@@ -121,7 +136,11 @@ class GeometricVerifierController {
   bool Setup();
 
   // Verify one batch of multiple image pairs.
-  void Verify(const std::vector<std::pair<image_t, image_t>>& image_pairs);
+  void Verify(const std::vector<std::pair<image_t, image_t>>& image_pairs,
+              bool mark_as_loop_closure = false);
+  // Verify pairs with pair-level provenance; see MatchWithProvenance.
+  void VerifyWithProvenance(
+      const std::vector<FeatureMatcherImagePair>& image_pairs);
 
  private:
   TwoViewGeometryOptions geometry_options_;
