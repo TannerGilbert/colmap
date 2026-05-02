@@ -27,8 +27,8 @@ struct LossConfig {
   std::unique_ptr<ceres::LossFunction> CreateLossFunction() const {
     auto loss = colmap::CreateLossFunction(type, scale);
     if (weight != 1.0) {
-      loss.reset(
-          new ceres::ScaledLoss(loss.release(), weight, ceres::TAKE_OWNERSHIP));
+      loss.reset(new ceres::ScaledLoss(
+          loss.release(), weight, ceres::TAKE_OWNERSHIP));
     }
     return loss;
   }

@@ -14,7 +14,9 @@ using namespace colmap;
 using namespace pybind11::literals;
 namespace py = pybind11;
 
-// FORK-REMOVAL TODO: fork-only; see fork_removal_todo.md.
+// FORK-REMOVAL TODO — entire `BindImagePairInliers` (and the C++
+// `ImagePairsInlierCount` it wraps) are fork-only. See
+// `.claude/notes/glomap_audit/fork_removal_todo.md` for the removal plan.
 void BindImagePairInliers(py::module& m) {
   auto PyOpts =
       py::classh<InlierThresholdOptions>(m, "InlierThresholdOptions")

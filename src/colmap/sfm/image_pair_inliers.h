@@ -9,8 +9,15 @@
 
 namespace colmap {
 
-// FORK-REMOVAL TODO: entire file is fork-only; vanilla colmap scores
-// inliers during geometric verification. See fork_removal_todo.md.
+// FORK-REMOVAL TODO — this entire file (InlierThresholdOptions struct,
+// ImagePairsInlierCount function, and the implementation in
+// image_pair_inliers.cc) is fork-only. Vanilla colmap rescores pair
+// inliers inside the geometric-verification RANSAC loop, not as a
+// separate "score every pair after relative-pose estimation" pass. The
+// fork-side `pycolmap.image_pairs_inlier_count` Python caller in
+// `mpsfm/mapper/glomap/phases/relative_pose.py` is the only consumer.
+// Slated for removal once reproducibility window closes; see
+// `.claude/notes/glomap_audit/fork_removal_todo.md`.
 
 // Thresholds used by inlier scoring.
 struct InlierThresholdOptions {

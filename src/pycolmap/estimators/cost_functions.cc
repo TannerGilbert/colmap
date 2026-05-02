@@ -195,12 +195,12 @@ void BindCostFunctions(py::module& m_parent) {
         &ScaledDepthErrorCostFunctor::Create<double>,
         "depth"_a,
         "Depth prior: cam_z(point) - shift - depth*exp(scale)");
-  m.def(
-      "ScaledDepthErrorCost",
-      &ScaledDepthErrorConstantPoseCostFunctor::Create<const Rigid3d&, double>,
-      "cam_from_world"_a,
-      "depth"_a,
-      "Depth prior with constant pose");
+  m.def("ScaledDepthErrorCost",
+        &ScaledDepthErrorConstantPoseCostFunctor::Create<const Rigid3d&,
+                                                         double>,
+        "cam_from_world"_a,
+        "depth"_a,
+        "Depth prior with constant pose");
   m.def("LogScaledDepthErrorCost",
         &LogScaledDepthErrorCostFunctor::Create<double>,
         "depth"_a,

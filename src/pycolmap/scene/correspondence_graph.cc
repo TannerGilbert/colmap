@@ -46,8 +46,10 @@ void BindCorrespondenceGraph(py::module& m) {
   py::classh<CorrespondenceGraph::ImagePair> PyImagePair(m, "ImagePair");
   PyImagePair.def(py::init<>())
       .def(py::init<image_t, image_t>(), "image_id1"_a, "image_id2"_a)
-      .def_readwrite("image_id1", &CorrespondenceGraph::ImagePair::image_id1)
-      .def_readwrite("image_id2", &CorrespondenceGraph::ImagePair::image_id2)
+      .def_readwrite("image_id1",
+                     &CorrespondenceGraph::ImagePair::image_id1)
+      .def_readwrite("image_id2",
+                     &CorrespondenceGraph::ImagePair::image_id2)
       .def_readwrite("pair_id", &CorrespondenceGraph::ImagePair::pair_id)
       .def_readwrite("is_valid", &CorrespondenceGraph::ImagePair::is_valid)
       .def_readwrite("weight", &CorrespondenceGraph::ImagePair::weight)

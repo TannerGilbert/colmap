@@ -286,37 +286,36 @@ void BindReconstruction(py::module& m) {
              return Reconstruction(self);
            })
       .def("__repr__", &CreateRepresentation<Reconstruction>)
-      .def("summary",
+      .def("summary", [](const Reconstruction& self) {
+        std::ostringstream ss;
+        ss << "Reconstruction:"
+           << "\n\tnum_rigs = " << self.NumRigs()
+           << "\n\tnum_cameras = " << self.NumCameras()
+           << "\n\tnum_frames = " << self.NumFrames()
+           << "\n\tnum_reg_frames = " << self.NumRegFrames()
+           << "\n\tnum_images = " << self.NumImages()
+           << "\n\tnum_points3D = " << self.NumPoints3D()
+           << "\n\tnum_observations = " << self.ComputeNumObservations()
+           << "\n\tmean_track_length = " << self.ComputeMeanTrackLength()
+           << "\n\tmean_observations_per_image = "
+           << self.ComputeMeanObservationsPerRegImage()
+           << "\n\tmean_reprojection_error = "
+           << self.ComputeMeanReprojectionError();
+        return ss.str();
+      })
+      .def("clone",
            [](const Reconstruction& self) {
-             std::ostringstream ss;
-             ss << "Reconstruction:"
-                << "\n\tnum_rigs = " << self.NumRigs()
-                << "\n\tnum_cameras = " << self.NumCameras()
-                << "\n\tnum_frames = " << self.NumFrames()
-                << "\n\tnum_reg_frames = " << self.NumRegFrames()
-                << "\n\tnum_images = " << self.NumImages()
-                << "\n\tnum_points3D = " << self.NumPoints3D()
-                << "\n\tnum_observations = " << self.ComputeNumObservations()
-                << "\n\tmean_track_length = " << self.ComputeMeanTrackLength()
-                << "\n\tmean_observations_per_image = "
-                << self.ComputeMeanObservationsPerRegImage()
-                << "\n\tmean_reprojection_error = "
-                << self.ComputeMeanReprojectionError();
-             return ss.str();
-           })
-      .def(
-          "clone",
-          [](const Reconstruction& self) {
-            return std::make_shared<Reconstruction>(self);
-          },
-          "Create a deep copy of this reconstruction.")
+             return std::make_shared<Reconstruction>(self);
+           },
+           "Create a deep copy of this reconstruction.")
       .def("point3D_coords",
            &Reconstruction::Point3DCoords,
            "point3D_ids"_a,
            "Retrieve an Nx3 matrix of 3D coordinates for the given point IDs.")
       .def(
           "delete_points3D",
-          [](Reconstruction& self, const std::vector<point3D_t>& point3D_ids) {
+          [](Reconstruction& self,
+             const std::vector<point3D_t>& point3D_ids) {
             for (const auto pid : point3D_ids) {
               if (self.ExistsPoint3D(pid)) {
                 self.DeletePoint3D(pid);

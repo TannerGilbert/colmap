@@ -176,7 +176,7 @@ void ReestimateRelativePoses(
 }  // namespace
 
 // Core Ceres optimization for focal length calibration.
-// This is a pure function with no I/O dependencies.
+// Pure function with no I/O dependencies.
 // See: "Stable Intrinsic Auto-Calibration from Fundamental Matrices of Devices
 // with Uncorrelated Camera Parameters", Fetzer et al., WACV 2020.
 FocalLengthCalibResult CalibrateFocalLengths(

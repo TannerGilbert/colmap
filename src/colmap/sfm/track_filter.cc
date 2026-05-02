@@ -45,11 +45,10 @@ int FilterTracksByAngle(CorrespondenceGraph& /*view_graph*/,
   return counter;
 }
 
-int FilterTrackTriangulationAngle(
-    CorrespondenceGraph& /*view_graph*/,
-    const Reconstruction& rec,
-    std::unordered_map<point3D_t, Point3D>& tracks,
-    double min_angle_deg) {
+int FilterTrackTriangulationAngle(CorrespondenceGraph& /*view_graph*/,
+                                  const Reconstruction& rec,
+                                  std::unordered_map<point3D_t, Point3D>& tracks,
+                                  double min_angle_deg) {
   int counter = 0;
   const double min_angle_rad = DegToRad(min_angle_deg);
   std::unordered_map<image_t, Eigen::Vector3d> proj_centers;
