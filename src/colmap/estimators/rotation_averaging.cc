@@ -67,8 +67,14 @@ image_t ComputeMaximumPoseGraphSpanningTree(
   edges.reserve(pose_graph.NumEdges());
   weights.reserve(pose_graph.NumEdges());
 
-  // Weight = CG inlier count if available, else num_matches.
-  // LC-dominated edges get penalized when prioritize_tracking is set.
+  // Edge weight = inlier count when a CorrespondenceGraph is plumbed
+  // through (post-RANSAC survivor count, matches the inlier-count semantic),
+  // falling back to ``edge.num_matches`` (raw match count) otherwise so
+  // mainline colmap callers without a CG keep their existing behavior.
+  //
+  // When ``prioritize_tracking`` is also enabled, LC-dominated edges
+  // additionally have ``kLCPenalty`` subtracted so the spanning tree
+  // picks tracking-dominated edges as parents.
   constexpr float kLCPenalty = 1e9f;
   const auto* cg_map_ptr = (correspondence_graph != nullptr)
                                ? &correspondence_graph->ImagePairsMap()

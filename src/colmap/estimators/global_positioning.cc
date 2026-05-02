@@ -93,7 +93,10 @@ void GlobalPositioner::SetupProblem(const PoseGraph& pose_graph,
   frame_centers_.clear();
   cams_in_rig_.clear();
 
-  // Reserve to avoid pointer-invalidating reallocs.
+  // Reserve scales_ for both regular observations and lc_elements.
+  // Underestimating triggers ``vector::push_back`` reallocation mid-build,
+  // which invalidates the ``&scale`` data pointers that earlier residual
+  // blocks already stored.
   scales_.clear();
   size_t total_observations = 0;
   for (const auto& [point3D_id, point3D] : reconstruction.Points3D()) {
