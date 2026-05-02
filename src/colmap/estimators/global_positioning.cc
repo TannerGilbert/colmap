@@ -379,7 +379,7 @@ void GlobalPositioner::ParameterizeVariables(Reconstruction& reconstruction) {
     }
   }
 
-  // If do not optimize the points, set the points to be constant
+  // If do not optimize the rotations, set the camera rotations to be constant
   if (!options_.optimize_points) {
     for (const auto& [point3D_id, point3D] : reconstruction.Points3D()) {
       if (problem_->HasParameterBlock(point3D.xyz.data())) {

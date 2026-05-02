@@ -89,8 +89,10 @@ class RotationEstimator {
   explicit RotationEstimator(const RotationEstimatorOptions& options)
       : options_(options) {}
 
-  // Estimate global orientations for active_image_ids.
-  // Returns true on success.
+  // Estimates the global orientations of all views.
+  // Solves rotation averaging and registers frames with computed poses.
+  // active_image_ids defines which images to include.
+  // Returns true on successful estimation.
   bool EstimateRotations(
       const PoseGraph& pose_graph,
       const std::vector<PosePrior>& pose_priors,
@@ -118,7 +120,7 @@ class RotationEstimator {
       std::unordered_map<image_pair_t, double>* final_weights = nullptr,
       const class CorrespondenceGraph* correspondence_graph = nullptr);
 
-  // Initialize rotations from maximum spanning tree.
+  // Initializes rotations from maximum spanning tree.
   void InitializeFromMaximumSpanningTree(
       const PoseGraph& pose_graph,
       const std::unordered_set<image_t>& active_image_ids,
@@ -135,7 +137,10 @@ bool InitializeRigRotationsFromImages(
     const std::unordered_map<image_t, Rigid3d>& cams_from_world,
     Reconstruction& reconstruction);
 
-// High-level rotation averaging with rig expansion for unknown cam_from_rig.
+// High-level rotation averaging solver that handles rig expansion.
+// For cameras with unknown cam_from_rig, first estimates their orientations
+// independently using an expanded reconstruction, then initializes the
+// cam_from_rig and runs rotation averaging on the original reconstruction.
 bool RunRotationAveraging(
     const RotationEstimatorOptions& options,
     PoseGraph& pose_graph,

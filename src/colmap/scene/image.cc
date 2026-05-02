@@ -75,11 +75,12 @@ Image& Image::operator=(const Image& other) {
     num_points3D_ = other.NumPoints3D();
     points2D_ = other.Points2D();
     pixel_cholesky_xy_ = other.PixelCholeskyXY();
-    is_inlier = other.is_inlier;
-    is_track_anchor = other.is_track_anchor;
-    angular_stddevs = other.angular_stddevs;
+    // Public data members.
     features = other.features;
     features_undist = other.features_undist;
+    angular_stddevs = other.angular_stddevs;
+    is_inlier = other.is_inlier;
+    is_track_anchor = other.is_track_anchor;
   }
   return *this;
 }

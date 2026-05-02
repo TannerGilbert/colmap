@@ -117,7 +117,7 @@ void DecomposeRelPose(CorrespondenceGraph& view_graph,
         return;
       }
       // (Already filtered to prior-calibrated pairs above, so the
-      // early-return-without-prior-focal path never fires.)
+      // early-return-without-prior-focal branch never fires.)
 
       // Normalize translation to unit norm when non-zero.
       auto& tvg = image_pair.two_view_geometry;

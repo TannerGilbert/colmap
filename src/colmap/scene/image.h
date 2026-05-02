@@ -161,6 +161,9 @@ class Image {
   // Per-feature angular standard deviations (sigma_x, sigma_y) in radians.
   std::vector<Eigen::Vector2d> angular_stddevs;
 
+  // FORK-REMOVAL TODO: features / features_undist are fork-only.
+  // See .claude/notes/glomap_audit/fork_removal_todo.md.
+
   // Raw 2D keypoints (xy), separate from points2D_.
   std::vector<Eigen::Vector2d> features;
   // Undistorted 3D rays per feature.
@@ -316,11 +319,6 @@ const std::vector<struct Point2D>& Image::Points2D() const { return points2D_; }
 std::vector<struct Point2D>& Image::Points2D() { return points2D_; }
 
 bool Image::operator==(const Image& other) const {
-  // Identity-equality (NOT bit-equality across pipeline state). Mutable
-  // per-pipeline-phase fields (is_inlier, features_undist, ...) are
-  // intentionally NOT compared — two Images at different pipeline stages
-  // with the same identity should compare equal. pixel_cholesky_xy_ is
-  // included because it's a per-feature immutable property.
   const bool result = image_id_ == other.image_id_ &&          //
                       camera_id_ == other.camera_id_ &&        //
                       frame_id_ == other.frame_id_ &&          //

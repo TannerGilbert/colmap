@@ -40,8 +40,8 @@ COLMAP_ADD_LIBRARY(
         image_pair_inliers.h image_pair_inliers.cc
         observation_manager.h observation_manager.cc
         track_establishment.h track_establishment.cc
-        view_graph_manipulation.h view_graph_manipulation.cc
         track_filter.h track_filter.cc
+        view_graph_manipulation.h view_graph_manipulation.cc
     PUBLIC_LINK_LIBS
         colmap_scene
         colmap_estimators
