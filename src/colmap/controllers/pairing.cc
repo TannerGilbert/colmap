@@ -515,13 +515,13 @@ std::vector<std::pair<image_t, image_t>> SequentialPairGenerator::Next() {
 std::vector<FeatureMatcherImagePair>
 SequentialPairGenerator::NextWithProvenance() {
   if (!options_.mark_non_consecutive_as_lc) {
-    return NextLegacyWithProvenance();
+    return NextImageBatchedWithProvenance();
   }
-  return NextNativeLcWithProvenance();
+  return NextDistanceBatchedWithProvenance();
 }
 
 std::vector<FeatureMatcherImagePair>
-SequentialPairGenerator::NextLegacyWithProvenance() {
+SequentialPairGenerator::NextImageBatchedWithProvenance() {
   image_pairs_with_provenance_.clear();
   if (image_idx_ < image_ids_.size()) {
     LOG(INFO) << StringPrintf(
@@ -594,7 +594,7 @@ SequentialPairGenerator::NextLegacyWithProvenance() {
 }
 
 std::vector<FeatureMatcherImagePair>
-SequentialPairGenerator::NextNativeLcWithProvenance() {
+SequentialPairGenerator::NextDistanceBatchedWithProvenance() {
   image_pairs_with_provenance_.clear();
   while (overlap_distance_idx_ < overlap_distances_.size() &&
          image_pairs_with_provenance_.empty()) {

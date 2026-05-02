@@ -362,8 +362,8 @@ class SequentialPairGenerator : public PairGenerator {
 
  private:
   std::vector<image_t> GetOrderedImageIds() const;
-  std::vector<FeatureMatcherImagePair> NextLegacyWithProvenance();
-  std::vector<FeatureMatcherImagePair> NextNativeLcWithProvenance();
+  std::vector<FeatureMatcherImagePair> NextImageBatchedWithProvenance();
+  std::vector<FeatureMatcherImagePair> NextDistanceBatchedWithProvenance();
 
   const SequentialPairingOptions options_;
   const std::shared_ptr<FeatureMatcherCache> cache_;

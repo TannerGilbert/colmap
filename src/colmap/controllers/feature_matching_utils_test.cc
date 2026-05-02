@@ -119,8 +119,7 @@ void MatchPairsWithoutVerification(
   data.database->ClearTwoViewGeometries();
 }
 
-TEST(MergeLoopClosureInlierMatches,
-     MatchesVideoSfMEndpointUniquenessAndOrdering) {
+TEST(MergeLoopClosureInlierMatches, MatchesEndpointUniquenessAndOrdering) {
   const FeatureMatches transitive_matches = {
       {1, 10}, {2, 20}, {2, 21}, {3, 20}};
   const FeatureMatches candidate_matches = {

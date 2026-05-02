@@ -95,10 +95,10 @@ std::unordered_map<point3D_t, Point3D> EstablishTracksFromCorrGraph(
     const MatchPredicate& ignore_match) {
   using Observation = std::pair<image_t, point2D_t>;
 
-  // Union all matching observations. Iterate ImagePair metadata directly:
-  // VideoSfM populates matches/inliers on ImagePair without always using the
-  // flat correspondence graph storage behind ExtractMatchesBetweenImages.
-  // Fall back to the native correspondence storage for vanilla COLMAP pairs.
+  // Union all matching observations. Some callers populate matches/inliers on
+  // ImagePair directly without using the flat correspondence graph storage
+  // behind ExtractMatchesBetweenImages. Fall back to the native correspondence
+  // storage when needed.
   UnionFind<Observation> uf;
   FeatureMatches extracted_matches;
   for (const image_pair_t pair_id : valid_pair_ids) {
