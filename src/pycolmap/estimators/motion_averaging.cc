@@ -37,6 +37,11 @@ void BindGlobalPositioner(py::module& m) {
           .def_readwrite("optimize_scales",
                          &GlobalPositionerOptions::optimize_scales,
                          "Whether to optimize scales.")
+          .def_readwrite(
+              "refine_sensor_from_rig",
+              &GlobalPositionerOptions::refine_sensor_from_rig,
+              "When False, treat sensor_from_rig as a fixed pre-calibrated "
+              "parameter.")
           .def_readwrite("use_gpu",
                          &GlobalPositionerOptions::use_gpu,
                          "Whether to use GPU for optimization.")
@@ -270,7 +275,12 @@ void BindRotationEstimator(py::module& m) {
               "video_lc_cauchy_scale",
               &RotationEstimatorOptions::video_lc_cauchy_scale,
               "Cauchy loss scale for loop-closure pairs in the video "
-              "solver.");
+              "solver.")
+          .def_readwrite(
+              "refine_sensor_from_rig",
+              &RotationEstimatorOptions::refine_sensor_from_rig,
+              "When False, treat each non-ref sensor's cam_from_rig as a "
+              "pre-calibrated constant.");
   MakeDataclass(PyRotationEstimatorOptions);
 
   m.def(

@@ -78,6 +78,10 @@ struct RotationEstimatorOptions {
   // Loss scales for the video-aware Ceres solver.
   double video_tracking_huber_scale = 0.1;  // ~5.7 degrees
   double video_lc_cauchy_scale = 0.05;      // ~2.8 degrees
+
+  // When false, treat each non-ref sensor's cam_from_rig rotation as a
+  // pre-calibrated constant
+  bool refine_sensor_from_rig = true;
 };
 
 // High-level interface for rotation averaging.
@@ -133,9 +137,14 @@ class RotationEstimator {
 // Initialize rig rotations by averaging per-image rotations.
 // Estimates cam_from_rig for cameras with unknown calibration,
 // then computes rig_from_world for each frame.
+// When refine_sensor_from_rig is false, the per-sensor cam_from_rig
+// values are left untouched (no NaN-marking of translation, no
+// resampling of the rotation) — only per-frame rig_from_world is
+// updated. This matches the calibrated-rig semantics.
 bool InitializeRigRotationsFromImages(
     const std::unordered_map<image_t, Rigid3d>& cams_from_world,
-    Reconstruction& reconstruction);
+    Reconstruction& reconstruction,
+    bool refine_sensor_from_rig = true);
 
 // High-level rotation averaging solver that handles rig expansion.
 // For cameras with unknown cam_from_rig, first estimates their orientations
