@@ -209,7 +209,23 @@ void BindSfM(py::module& m) {
                            &Opts::skip_global_positioning)
             .def_readwrite("skip_bundle_adjustment",
                            &Opts::skip_bundle_adjustment)
-            .def_readwrite("skip_retriangulation", &Opts::skip_retriangulation);
+            .def_readwrite("skip_retriangulation", &Opts::skip_retriangulation)
+            .def_readwrite(
+                "use_prior_position",
+                &Opts::use_prior_position,
+                "When True, BA uses CreatePosePriorBundleAdjuster against "
+                "pose priors.")
+            .def_readwrite(
+                "use_robust_loss_on_prior_position",
+                &Opts::use_robust_loss_on_prior_position,
+                "Use a CAUCHY loss on the prior-position residual instead "
+                "of TRIVIAL.")
+            .def_readwrite(
+                "prior_position_loss_scale",
+                &Opts::prior_position_loss_scale,
+                "Loss scale for the prior-position residual (default 7.815, "
+                "matches sqrt(chi-square 95% 3-DoF) used by the incremental "
+                "mapper).");
     MakeDataclass(PyOpts);
   }
 
