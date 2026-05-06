@@ -118,7 +118,7 @@ class Image {
   inline const std::vector<struct Point2D>& Points2D() const;
   inline std::vector<struct Point2D>& Points2D();
   void SetPoints2D(const std::vector<Eigen::Vector2d>& points);
-  void SetPoints2D(const std::vector<struct Point2D>& points);
+  void SetPoints2D(std::vector<struct Point2D> points);
 
   // Return point3D IDs for all points2D (kInvalidPoint3DId for untriangulated).
   std::vector<point3D_t> Point3DIds() const;
