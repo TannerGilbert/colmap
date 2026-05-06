@@ -1,6 +1,8 @@
 #include "colmap/sfm/global_mapper.h"
 
+#include "colmap/estimators/bundle_adjustment.h"
 #include "colmap/estimators/rotation_averaging.h"
+#include "colmap/geometry/pose_prior.h"
 #include "colmap/scene/projection.h"
 #include "colmap/sfm/incremental_mapper.h"
 #include "colmap/sfm/observation_manager.h"
@@ -15,7 +17,11 @@ namespace colmap {
 namespace {
 
 bool RunBundleAdjustment(const BundleAdjustmentOptions& options,
-                         Reconstruction& reconstruction) {
+                         Reconstruction& reconstruction,
+                         bool use_prior_position = false,
+                         bool use_robust_loss_on_prior_position = false,
+                         double prior_position_loss_scale = 7.815,
+                         const std::vector<PosePrior>& pose_priors = {}) {
   if (reconstruction.NumImages() == 0) {
     LOG(ERROR) << "Cannot run bundle adjustment: no registered images";
     return false;
@@ -31,9 +37,28 @@ bool RunBundleAdjustment(const BundleAdjustmentOptions& options,
       ba_config.AddImage(image_id);
     }
   }
-  ba_config.FixGauge(BundleAdjustmentGauge::TWO_CAMS_FROM_WORLD);
 
-  auto ba = CreateDefaultBundleAdjuster(options, ba_config, reconstruction);
+  // The prior-position residual itself anchors the absolute frame; if we
+  // also fixed two cameras the constraints would conflict. Only ask for
+  // pose-prior BA when there are enough frames to triangulate against
+  // (>2 keeps the gauge well-defined even before priors kick in) and
+  // priors are actually present.
+  const bool use_priors = use_prior_position && ba_config.NumImages() > 2 &&
+                          !pose_priors.empty();
+  std::unique_ptr<BundleAdjuster> ba;
+  if (use_priors) {
+    PosePriorBundleAdjustmentOptions prior_options;
+    if (use_robust_loss_on_prior_position) {
+      prior_options.ceres->prior_position_loss.type =
+          CeresBundleAdjustmentOptions::LossFunctionType::CAUCHY;
+    }
+    prior_options.ceres->prior_position_loss.scale = prior_position_loss_scale;
+    ba = CreatePosePriorBundleAdjuster(
+        options, prior_options, ba_config, pose_priors, reconstruction);
+  } else {
+    ba_config.FixGauge(BundleAdjustmentGauge::TWO_CAMS_FROM_WORLD);
+    ba = CreateDefaultBundleAdjuster(options, ba_config, reconstruction);
+  }
 
   return ba->Solve()->IsSolutionUsable();
 }
@@ -195,7 +220,8 @@ void GlobalMapper::EstablishTracks(const GlobalMapperOptions& options) {
 bool GlobalMapper::GlobalPositioning(const GlobalPositionerOptions& options,
                                      double max_angular_reproj_error_deg,
                                      double max_normalized_reproj_error,
-                                     double min_tri_angle_deg) {
+                                     double min_tri_angle_deg,
+                                     bool use_prior_position) {
   if (!RunGlobalPositioning(options, *pose_graph_, *reconstruction_)) {
     return false;
   }
@@ -246,10 +272,11 @@ bool GlobalMapper::GlobalPositioning(const GlobalPositionerOptions& options,
       reconstruction_->Point3DIds(),
       ReprojectionErrorType::NORMALIZED);
 
-  // Normalize the structure for numerical stability.
-  // TODO: Skip normalization when position priors are used (similar to
-  // incremental mapper's !use_prior_position condition).
-  reconstruction_->Normalize();
+  // Normalize the structure for numerical stability — but only when no
+  // priors anchor the absolute frame (they'd be washed out by Normalize).
+  if (!use_prior_position) {
+    reconstruction_->Normalize();
+  }
 
   return true;
 }
@@ -260,13 +287,24 @@ bool GlobalMapper::IterativeBundleAdjustment(
     double min_tri_angle_deg,
     int num_iterations,
     bool skip_fixed_rotation_stage,
-    bool skip_joint_optimization_stage) {
+    bool skip_joint_optimization_stage,
+    bool use_prior_position,
+    bool use_robust_loss_on_prior_position,
+    double prior_position_loss_scale) {
+  const std::vector<PosePrior> pose_priors =
+      use_prior_position ? database_cache_->PosePriors()
+                         : std::vector<PosePrior>{};
   for (int ite = 0; ite < num_iterations; ite++) {
     // Optional fixed-rotation stage: optimize positions only
     if (!skip_fixed_rotation_stage) {
       BundleAdjustmentOptions opts_position_only = options;
       opts_position_only.constant_rig_from_world_rotation = true;
-      if (!RunBundleAdjustment(opts_position_only, *reconstruction_)) {
+      if (!RunBundleAdjustment(opts_position_only,
+                               *reconstruction_,
+                               use_prior_position,
+                               use_robust_loss_on_prior_position,
+                               prior_position_loss_scale,
+                               pose_priors)) {
         return false;
       }
       LOG(INFO) << "Global bundle adjustment iteration " << ite + 1 << " / "
@@ -275,17 +313,21 @@ bool GlobalMapper::IterativeBundleAdjustment(
 
     // Joint optimization stage: default BA
     if (!skip_joint_optimization_stage) {
-      if (!RunBundleAdjustment(options, *reconstruction_)) {
+      if (!RunBundleAdjustment(options,
+                               *reconstruction_,
+                               use_prior_position,
+                               use_robust_loss_on_prior_position,
+                               prior_position_loss_scale,
+                               pose_priors)) {
         return false;
       }
     }
     LOG(INFO) << "Global bundle adjustment iteration " << ite + 1 << " / "
               << num_iterations << " finished";
 
-    // Normalize the structure for numerical stability.
-    // TODO: Skip normalization when position priors are used (similar to
-    // incremental mapper's !use_prior_position condition).
-    reconstruction_->Normalize();
+    if (!use_prior_position) {
+      reconstruction_->Normalize();
+    }
 
     // Filter tracks based on the estimation
     // For the filtering, in each round, the criteria for outlier is
@@ -334,7 +376,10 @@ bool GlobalMapper::IterativeRetriangulateAndRefine(
     const IncrementalTriangulator::Options& options,
     const BundleAdjustmentOptions& ba_options,
     double max_normalized_reproj_error,
-    double min_tri_angle_deg) {
+    double min_tri_angle_deg,
+    bool use_prior_position,
+    bool use_robust_loss_on_prior_position,
+    double prior_position_loss_scale) {
   // Delete all existing 3D points and re-establish 2D-3D correspondences.
   reconstruction_->DeleteAllPoints2DAndPoints3D();
 
@@ -360,12 +405,17 @@ bool GlobalMapper::IterativeRetriangulateAndRefine(
   // Iterative global refinement.
   IncrementalMapper::Options mapper_options;
   mapper_options.random_seed = options.random_seed;
+  mapper_options.use_prior_position = use_prior_position;
+  mapper_options.use_robust_loss_on_prior_position =
+      use_robust_loss_on_prior_position;
+  mapper_options.prior_position_loss_scale = prior_position_loss_scale;
   mapper.IterativeGlobalRefinement(/*max_num_refinements=*/5,
                                    /*max_refinement_change=*/0.0005,
                                    mapper_options,
                                    custom_ba_options,
                                    options,
-                                   /*normalize_reconstruction=*/true);
+                                   /*normalize_reconstruction=*/
+                                   !use_prior_position);
 
   mapper.EndReconstruction(/*discard=*/false);
 
@@ -376,14 +426,21 @@ bool GlobalMapper::IterativeRetriangulateAndRefine(
       reconstruction_->Point3DIds(),
       ReprojectionErrorType::NORMALIZED);
 
-  if (!RunBundleAdjustment(ba_options, *reconstruction_)) {
+  const std::vector<PosePrior> pose_priors =
+      use_prior_position ? database_cache_->PosePriors()
+                         : std::vector<PosePrior>{};
+  if (!RunBundleAdjustment(ba_options,
+                           *reconstruction_,
+                           use_prior_position,
+                           use_robust_loss_on_prior_position,
+                           prior_position_loss_scale,
+                           pose_priors)) {
     return false;
   }
 
-  // Normalize the structure for numerical stability.
-  // TODO: Skip normalization when position priors are used (similar to
-  // incremental mapper's !use_prior_position condition).
-  reconstruction_->Normalize();
+  if (!use_prior_position) {
+    reconstruction_->Normalize();
+  }
 
   obs_manager.FilterPoints3DWithLargeReprojectionError(
       max_normalized_reproj_error,
@@ -434,7 +491,8 @@ bool GlobalMapper::Solve(const GlobalMapperOptions& options) {
     if (!GlobalPositioning(options.GlobalPositioning(),
                            options.max_angular_reproj_error_deg,
                            options.max_normalized_reproj_error,
-                           options.min_tri_angle_deg)) {
+                           options.min_tri_angle_deg,
+                           options.use_prior_position)) {
       return false;
     }
     LOG(INFO) << "Global positioning done in " << run_timer.ElapsedSeconds()
@@ -444,6 +502,13 @@ bool GlobalMapper::Solve(const GlobalMapperOptions& options) {
   // Bundle adjustment
   if (!options.skip_bundle_adjustment) {
     LOG_HEADING1("Running iterative bundle adjustment");
+    if (options.use_prior_position) {
+      LOG(INFO) << "Pose-prior BA active: "
+                << database_cache_->PosePriors().size()
+                << " priors will be applied (robust_loss="
+                << options.use_robust_loss_on_prior_position
+                << ", loss_scale=" << options.prior_position_loss_scale << ").";
+    }
     Timer run_timer;
     run_timer.Start();
     if (!IterativeBundleAdjustment(options.BundleAdjustment(),
@@ -451,7 +516,10 @@ bool GlobalMapper::Solve(const GlobalMapperOptions& options) {
                                    options.min_tri_angle_deg,
                                    options.ba_num_iterations,
                                    options.ba_skip_fixed_rotation_stage,
-                                   options.ba_skip_joint_optimization_stage)) {
+                                   options.ba_skip_joint_optimization_stage,
+                                   options.use_prior_position,
+                                   options.use_robust_loss_on_prior_position,
+                                   options.prior_position_loss_scale)) {
       return false;
     }
     LOG(INFO) << "Iterative bundle adjustment done in "
@@ -463,10 +531,14 @@ bool GlobalMapper::Solve(const GlobalMapperOptions& options) {
     LOG_HEADING1("Running iterative retriangulation and refinement");
     Timer run_timer;
     run_timer.Start();
-    if (!IterativeRetriangulateAndRefine(options.Retriangulation(),
-                                         options.BundleAdjustment(),
-                                         options.max_normalized_reproj_error,
-                                         options.min_tri_angle_deg)) {
+    if (!IterativeRetriangulateAndRefine(
+            options.Retriangulation(),
+            options.BundleAdjustment(),
+            options.max_normalized_reproj_error,
+            options.min_tri_angle_deg,
+            options.use_prior_position,
+            options.use_robust_loss_on_prior_position,
+            options.prior_position_loss_scale)) {
       return false;
     }
     LOG(INFO) << "Iterative retriangulation and refinement done in "
