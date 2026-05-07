@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "colmap/estimators/cost_functions/quaternion_utils.h"
 #include "colmap/estimators/cost_functions/utils.h"
 #include "colmap/geometry/rigid3.h"
 #include "colmap/sensor/models.h"
