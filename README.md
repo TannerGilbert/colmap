@@ -97,8 +97,8 @@ database can be reused directly by later mapper runs. In `global_mapper`,
 `track_lc_second_pass` keeps LC matches out of regular track union-find and
 adds them later as LC observations. `gp_use_lc_observations` makes global
 positioning consume those LC observations, and `gp_lc_loss_*` sets their
-separate robust loss. The loss values above mirror the VideoSfM config this
-logic was transferred from.
+separate robust loss. The LC geometry loss values above mirror the first
+global-positioning pass in the VideoSfM config this logic was transferred from.
 
 Documentation
 -------------

@@ -158,8 +158,9 @@ geometric verification do not need to be recomputed::
 The ``track_lc_second_pass`` option keeps LC matches out of the regular track
 union-find and adds them later as LC observations. The
 ``gp_use_lc_observations`` option makes global positioning consume those LC
-observations, and ``gp_lc_loss_*`` controls their separate robust loss. The
-loss values above mirror the VideoSfM config this logic was transferred from.
+observations, and ``gp_lc_loss_*`` controls their separate robust loss. The LC
+geometry loss values above mirror the first global-positioning pass in the
+VideoSfM config this logic was transferred from.
 
 If you want to run COLMAP on a computer without an attached display (e.g.,
 cluster or cloud service), COLMAP automatically switches to use CUDA if
