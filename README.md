@@ -86,7 +86,8 @@ colmap global_mapper \
     --GlobalMapper.track_lc_second_pass 1 \
     --GlobalMapper.gp_use_lc_observations 1 \
     --GlobalMapper.gp_lc_loss_type CAUCHY \
-    --GlobalMapper.gp_lc_loss_scale 0.05
+    --GlobalMapper.gp_lc_loss_scale 1.0 \
+    --GlobalMapper.gp_lc_loss_weight 0.2
 ```
 
 `track_provenance` only rewrites `two_view_geometries`: direct consecutive
@@ -96,7 +97,8 @@ database can be reused directly by later mapper runs. In `global_mapper`,
 `track_lc_second_pass` keeps LC matches out of regular track union-find and
 adds them later as LC observations. `gp_use_lc_observations` makes global
 positioning consume those LC observations, and `gp_lc_loss_*` sets their
-separate robust loss.
+separate robust loss. The loss values above mirror the VideoSfM config this
+logic was transferred from.
 
 Documentation
 -------------
