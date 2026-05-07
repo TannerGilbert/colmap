@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string_view>
 
 #include <ceres/loss_function.h>
 
@@ -13,6 +14,9 @@ enum class LossFunctionType {
   CAUCHY,
   HUBER,
 };
+
+std::string_view LossFunctionTypeToString(LossFunctionType loss_function_type);
+LossFunctionType LossFunctionTypeFromString(std::string_view name);
 
 // Build a ceres::LossFunction from a typed config.
 std::unique_ptr<ceres::LossFunction> CreateLossFunction(

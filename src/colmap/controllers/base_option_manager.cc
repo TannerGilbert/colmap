@@ -145,6 +145,7 @@ void BaseOptionManager::ResetImpl(bool reset_logging) {
   options_double_.clear();
   options_string_.clear();
   options_path_.clear();
+  enum_options_.clear();
 
   added_random_options_ = false;
   added_log_options_ = false;
@@ -325,6 +326,10 @@ bool BaseOptionManager::ReRead(const std::filesystem::path& path,
 
 void BaseOptionManager::Write(const std::filesystem::path& path) const {
   boost::property_tree::ptree pt;
+
+  for (const auto& info : enum_options_) {
+    info->update();
+  }
 
   // First, put all options without a section and then those with a section.
   // This is necessary as otherwise older Boost versions will write the

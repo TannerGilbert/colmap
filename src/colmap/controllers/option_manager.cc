@@ -783,6 +783,18 @@ void OptionManager::AddGlobalMapperOptions() {
   AddDefaultOption(
       "GlobalMapper.gp_use_lc_observations",
       &global_mapper->mapper.global_positioning.use_lc_observations);
+  AddDefaultEnumOption(
+      "GlobalMapper.gp_lc_loss_type",
+      &global_mapper->mapper.global_positioning.loss_lc_geometry.type,
+      LossFunctionTypeToString,
+      LossFunctionTypeFromString,
+      "{TRIVIAL, SOFT_L1, CAUCHY, HUBER}");
+  AddDefaultOption(
+      "GlobalMapper.gp_lc_loss_scale",
+      &global_mapper->mapper.global_positioning.loss_lc_geometry.scale);
+  AddDefaultOption(
+      "GlobalMapper.gp_lc_loss_weight",
+      &global_mapper->mapper.global_positioning.loss_lc_geometry.weight);
   AddDefaultOption("GlobalMapper.gp_max_num_iterations",
                    &global_mapper->mapper.global_positioning.solver_options
                         .max_num_iterations);

@@ -137,6 +137,7 @@ class BaseOptionManager {
   struct EnumOptionInfo {
     std::string value;            // String value for parsing
     std::function<void()> apply;  // Callback to apply string->enum conversion
+    std::function<void()> update;  // Callback to update string from enum
   };
   std::vector<std::unique_ptr<EnumOptionInfo>> enum_options_;
 
@@ -240,6 +241,9 @@ void BaseOptionManager::AddDefaultEnumOption(
   EnumOptionInfo* info_ptr = info.get();
   info->apply = [info_ptr, option, from_string_fn]() {
     *option = from_string_fn(info_ptr->value);
+  };
+  info->update = [info_ptr, option, to_string_fn]() {
+    info_ptr->value = std::string(to_string_fn(*option));
   };
 
   // Register as a string option pointing to our storage

@@ -148,7 +148,16 @@ geometric verification do not need to be recomputed::
     $ colmap global_mapper \
         --database_path $DATASET_PATH/database_track_provenance.db \
         --image_path $DATASET_PATH/images \
-        --output_path $DATASET_PATH/sparse
+        --output_path $DATASET_PATH/sparse \
+        --GlobalMapper.track_lc_second_pass 1 \
+        --GlobalMapper.gp_use_lc_observations 1 \
+        --GlobalMapper.gp_lc_loss_type CAUCHY \
+        --GlobalMapper.gp_lc_loss_scale 0.05
+
+The ``track_lc_second_pass`` option keeps LC matches out of the regular track
+union-find and adds them later as LC observations. The
+``gp_use_lc_observations`` option makes global positioning consume those LC
+observations, and ``gp_lc_loss_*`` controls their separate robust loss.
 
 If you want to run COLMAP on a computer without an attached display (e.g.,
 cluster or cloud service), COLMAP automatically switches to use CUDA if

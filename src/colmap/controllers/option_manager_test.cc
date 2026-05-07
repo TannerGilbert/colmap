@@ -33,6 +33,7 @@
 #include "colmap/controllers/image_reader.h"
 #include "colmap/controllers/incremental_pipeline.h"
 #include "colmap/controllers/pairing.h"
+#include "colmap/estimators/ceres_loss.h"
 #include "colmap/feature/sift.h"
 #include "colmap/mvs/patch_match_options.h"
 #include "colmap/util/file.h"
@@ -143,6 +144,12 @@ TEST(OptionManager, WriteAndRead) {
   options_write.global_mapper->mapper.track_lc_second_pass = true;
   options_write.global_mapper->mapper.global_positioning.use_lc_observations =
       true;
+  options_write.global_mapper->mapper.global_positioning.loss_lc_geometry.type =
+      LossFunctionType::CAUCHY;
+  options_write.global_mapper->mapper.global_positioning.loss_lc_geometry
+      .scale = 0.05;
+  options_write.global_mapper->mapper.global_positioning.loss_lc_geometry
+      .weight = 0.25;
   options_write.global_mapper->mapper.rotation_averaging.skip_risky_lc_pairs =
       true;
   options_write.global_mapper->mapper.rotation_averaging.use_video_constraints =
@@ -181,6 +188,21 @@ TEST(OptionManager, WriteAndRead) {
       options_read.global_mapper->mapper.global_positioning.use_lc_observations,
       options_write.global_mapper->mapper.global_positioning
           .use_lc_observations);
+  EXPECT_EQ(
+      options_read.global_mapper->mapper.global_positioning.loss_lc_geometry
+          .type,
+      options_write.global_mapper->mapper.global_positioning.loss_lc_geometry
+          .type);
+  EXPECT_EQ(
+      options_read.global_mapper->mapper.global_positioning.loss_lc_geometry
+          .scale,
+      options_write.global_mapper->mapper.global_positioning.loss_lc_geometry
+          .scale);
+  EXPECT_EQ(
+      options_read.global_mapper->mapper.global_positioning.loss_lc_geometry
+          .weight,
+      options_write.global_mapper->mapper.global_positioning.loss_lc_geometry
+          .weight);
   EXPECT_EQ(
       options_read.global_mapper->mapper.rotation_averaging.skip_risky_lc_pairs,
       options_write.global_mapper->mapper.rotation_averaging
