@@ -17,6 +17,7 @@
 #include <memory>
 #include <type_traits>
 
+#include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -281,6 +282,23 @@ void BindMatchFeatures(py::module& m) {
                 "TwoViewGeometryOptions()"),
       "device"_a = Device::AUTO,
       "Exhaustive feature matching");
+
+  m.def(
+      "derive_track_provenance",
+      static_cast<void (*)(const std::filesystem::path&,
+                           const SequentialPairingOptions&,
+                           const std::function<bool()>&)>(&DeriveTrackProvenance),
+      "database_path"_a,
+      py::arg_v("pairing_options",
+                SequentialPairingOptions(),
+                "SequentialPairingOptions()"),
+      py::arg_v("is_stopped", std::function<bool()>(), "None"),
+      "Derive sequential loop-closure track provenance from an existing "
+      "matched database. Marks non-sequential / cross-frame-rig pairs as "
+      "loop closures in the two_view_geometries table. Normally called "
+      "automatically inside match_sequential; expose standalone so the "
+      "Python pipeline can re-derive provenance on a database that was "
+      "matched without use_track_provenance set.");
 
   m.def("match_spatial",
         &MatchFeatures<SpatialPairingOptions, CreateSpatialFeatureMatcher>,

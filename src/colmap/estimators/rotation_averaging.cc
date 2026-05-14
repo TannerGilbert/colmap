@@ -292,8 +292,14 @@ void FilterEdgesByRelativeRotation(PoseGraph& pose_graph,
     const Eigen::Quaterniond cam2_from_cam1 =
         image2.CamFromWorld().rotation() *
         image1.CamFromWorld().rotation().inverse();
-    if (cam2_from_cam1.angularDistance(edge.cam2_from_cam1.rotation()) >
-        max_angle_rad) {
+    const double residual_rad =
+        cam2_from_cam1.angularDistance(edge.cam2_from_cam1.rotation());
+    if (residual_rad > max_angle_rad) {
+      LOG(INFO) << "  Rejected edge: " << image1.Name()
+                << " (image_id=" << image_id1 << ") <-> " << image2.Name()
+                << " (image_id=" << image_id2
+                << ")  rotation_error=" << RadToDeg(residual_rad)
+                << " deg  num_matches=" << edge.num_matches;
       pose_graph.SetInvalidEdge(pair_id);
       num_invalid++;
     }
@@ -775,8 +781,9 @@ bool RunRotationAveraging(
     for (const image_t image_id : active_image_ids) {
       active_frame_ids.insert(reconstruction.Image(image_id).FrameId());
     }
-    for (const image_t image_id : reconstruction.RegImageIds()) {
-      const frame_t frame_id = reconstruction.Image(image_id).FrameId();
+    const std::vector<frame_t> reg_frame_ids_snapshot =
+        reconstruction.RegFrameIds();
+    for (const frame_t frame_id : reg_frame_ids_snapshot) {
       THROW_CHECK(reconstruction.Frame(frame_id).HasPose());
       if (!active_frame_ids.count(frame_id)) {
         reconstruction.DeRegisterFrame(frame_id);

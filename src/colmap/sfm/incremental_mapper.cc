@@ -185,8 +185,11 @@ void IncrementalMapper::RegisterInitialImagePair(
   RegisterFrameEvent(image2.FrameId());
 }
 
-bool IncrementalMapper::RegisterNextImage(const Options& options,
-                                          const image_t image_id) {
+bool IncrementalMapper::RegisterNextImage(
+    const Options& options,
+    const image_t image_id,
+    const std::optional<Rigid3d>& cam_from_world_prior,
+    const std::optional<Eigen::Matrix3d>& position_prior_covariance) {
   THROW_CHECK_NOTNULL(reconstruction_);
   THROW_CHECK_NOTNULL(obs_manager_);
   THROW_CHECK_GT(reconstruction_->NumRegFrames(), 0);
@@ -221,7 +224,26 @@ bool IncrementalMapper::RegisterNextImage(const Options& options,
     }
     if (all_cameras_have_good_focal_length) {
       VLOG(2) << "Registering image using generalized pose estimation";
-      return RegisterNextGeneralFrame(options, *image.FramePtr());
+      // Convert the cam_from_world prior into a rig_from_world prior so
+      // the generalized refinement (which optimises the rig pose) can
+      // anchor against it. `cam_from_world = sensor_from_rig * rig_from_world`,
+      // hence `rig_from_world = Inverse(sensor_from_rig) * cam_from_world`.
+      // For the rig's ref sensor, sensor_from_rig is identity.
+      std::optional<Rigid3d> rig_from_world_prior = std::nullopt;
+      if (cam_from_world_prior.has_value()) {
+        const auto& rig = *image.FramePtr()->RigPtr();
+        if (rig.IsRefSensor(camera.SensorId())) {
+          rig_from_world_prior = cam_from_world_prior;
+        } else {
+          const Rigid3d& sensor_from_rig = rig.SensorFromRig(camera.SensorId());
+          rig_from_world_prior =
+              Inverse(sensor_from_rig) * (*cam_from_world_prior);
+        }
+      }
+      return RegisterNextGeneralFrame(options,
+                                      *image.FramePtr(),
+                                      rig_from_world_prior,
+                                      position_prior_covariance);
     }
   }
 
@@ -377,26 +399,51 @@ bool IncrementalMapper::RegisterNextImage(const Options& options,
   size_t num_inliers;
   std::vector<char> inlier_mask;
   Rigid3d cam_from_world;
-  if (!EstimateAbsolutePose(abs_pose_options,
-                            tri_points2D,
-                            tri_points3D,
-                            &cam_from_world,
-                            &camera,
-                            &num_inliers,
-                            &inlier_mask)) {
-    VLOG(2) << "Absolute pose estimation failed";
-    return false;
-  }
-
-  if (num_inliers < static_cast<size_t>(options.abs_pose_min_num_inliers)) {
-    VLOG(2) << "Absolute pose estimation failed due to insufficient inliers ("
-            << num_inliers << " < " << options.abs_pose_min_num_inliers << ")";
-    return false;
+  const bool ransac_ok = EstimateAbsolutePose(abs_pose_options,
+                                              tri_points2D,
+                                              tri_points3D,
+                                              &cam_from_world,
+                                              &camera,
+                                              &num_inliers,
+                                              &inlier_mask);
+  bool used_prior_fallback = false;
+  if (!ransac_ok ||
+      num_inliers < static_cast<size_t>(options.abs_pose_min_num_inliers)) {
+    if (!cam_from_world_prior.has_value()) {
+      if (!ransac_ok) {
+        VLOG(2) << "Absolute pose estimation failed";
+      } else {
+        VLOG(2) << "Absolute pose estimation failed due to insufficient "
+                   "inliers ("
+                << num_inliers << " < " << options.abs_pose_min_num_inliers
+                << ")";
+      }
+      return false;
+    }
+    // Phase 1 fallback: RANSAC failed but caller supplied an IMU-derived
+    // pose prior — seed refinement from the prior and treat every 2D-3D
+    // correspondence as a candidate inlier. The robust loss inside
+    // RefineAbsolutePose downweights outliers; the post-refinement
+    // reprojection check below filters the result.
+    VLOG(2) << "RANSAC failed; falling back to pose-prior refinement.";
+    cam_from_world = *cam_from_world_prior;
+    inlier_mask.assign(tri_points2D.size(), 1);
+    num_inliers = tri_points2D.size();
+    used_prior_fallback = true;
   }
 
   //////////////////////////////////////////////////////////////////////////////
   // Pose refinement
   //////////////////////////////////////////////////////////////////////////////
+
+  if (cam_from_world_prior.has_value()) {
+    abs_pose_refinement_options.use_position_prior = true;
+    abs_pose_refinement_options.position_prior_in_world =
+        cam_from_world_prior->TgtOriginInSrc();
+    abs_pose_refinement_options.position_prior_covariance =
+        position_prior_covariance.value_or(
+            0.05 * 0.05 * Eigen::Matrix3d::Identity());
+  }
 
   if (!RefineAbsolutePose(abs_pose_refinement_options,
                           inlier_mask,
@@ -406,6 +453,39 @@ bool IncrementalMapper::RegisterNextImage(const Options& options,
                           &camera)) {
     VLOG(2) << "Absolute pose refinement failed";
     return false;
+  }
+
+  // When we took the prior-fallback path, recheck inliers by reprojection
+  // error. The fallback admitted all correspondences to refinement; we
+  // need the standard quality gate before accepting the registration.
+  if (used_prior_fallback) {
+    size_t actual_inliers = 0;
+    for (size_t i = 0; i < tri_points2D.size(); ++i) {
+      const Eigen::Vector3d p_cam = cam_from_world * tri_points3D[i];
+      if (p_cam.z() <= 0) {
+        inlier_mask[i] = 0;
+        continue;
+      }
+      const std::optional<Eigen::Vector2d> p_img = camera.ImgFromCam(p_cam);
+      if (!p_img.has_value()) {
+        inlier_mask[i] = 0;
+        continue;
+      }
+      const double err = (*p_img - tri_points2D[i]).norm();
+      if (err <= options.abs_pose_max_error) {
+        ++actual_inliers;
+      } else {
+        inlier_mask[i] = 0;
+      }
+    }
+    if (actual_inliers <
+        static_cast<size_t>(options.abs_pose_min_num_inliers)) {
+      VLOG(2) << "Prior-fallback registration rejected: only "
+              << actual_inliers << " of " << options.abs_pose_min_num_inliers
+              << " required inliers after refinement.";
+      return false;
+    }
+    num_inliers = actual_inliers;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -435,8 +515,11 @@ bool IncrementalMapper::RegisterNextImage(const Options& options,
   return true;
 }
 
-bool IncrementalMapper::RegisterNextGeneralFrame(const Options& options,
-                                                 Frame& frame) {
+bool IncrementalMapper::RegisterNextGeneralFrame(
+    const Options& options,
+    Frame& frame,
+    const std::optional<Rigid3d>& rig_from_world_prior,
+    const std::optional<Eigen::Matrix3d>& position_prior_covariance) {
   // Only call this method for frames with more than
   THROW_CHECK_GT(frame.RigPtr()->NumSensors(), 1);
 
@@ -551,28 +634,50 @@ bool IncrementalMapper::RegisterNextGeneralFrame(const Options& options,
   size_t num_inliers;
   std::vector<char> inlier_mask;
   Rigid3d rig_from_world;
-  if (!EstimateGeneralizedAbsolutePose(abs_pose_options,
-                                       tri_points2D,
-                                       tri_points3D,
-                                       tri_camera_idxs,
-                                       cams_from_rig,
-                                       cameras,
-                                       &rig_from_world,
-                                       &num_inliers,
-                                       &inlier_mask)) {
-    VLOG(2) << "Absolute pose estimation failed";
-    return false;
-  }
-
-  if (num_inliers < static_cast<size_t>(options.abs_pose_min_num_inliers)) {
-    VLOG(2) << "Absolute pose estimation failed due to insufficient inliers ("
-            << num_inliers << " < " << options.abs_pose_min_num_inliers << ")";
-    return false;
+  const bool ransac_ok = EstimateGeneralizedAbsolutePose(abs_pose_options,
+                                                         tri_points2D,
+                                                         tri_points3D,
+                                                         tri_camera_idxs,
+                                                         cams_from_rig,
+                                                         cameras,
+                                                         &rig_from_world,
+                                                         &num_inliers,
+                                                         &inlier_mask);
+  bool used_prior_fallback = false;
+  if (!ransac_ok ||
+      num_inliers < static_cast<size_t>(options.abs_pose_min_num_inliers)) {
+    if (!rig_from_world_prior.has_value()) {
+      if (!ransac_ok) {
+        VLOG(2) << "Absolute pose estimation failed";
+      } else {
+        VLOG(2) << "Absolute pose estimation failed due to insufficient "
+                   "inliers ("
+                << num_inliers << " < " << options.abs_pose_min_num_inliers
+                << ")";
+      }
+      return false;
+    }
+    // Phase 1 fallback (rig path): seed refinement from the prior.
+    VLOG(2) << "Generalized RANSAC failed; falling back to pose-prior "
+               "refinement.";
+    rig_from_world = *rig_from_world_prior;
+    inlier_mask.assign(tri_points2D.size(), 1);
+    num_inliers = tri_points2D.size();
+    used_prior_fallback = true;
   }
 
   //////////////////////////////////////////////////////////////////////////////
   // Pose refinement
   //////////////////////////////////////////////////////////////////////////////
+
+  if (rig_from_world_prior.has_value()) {
+    abs_pose_refinement_options.use_position_prior = true;
+    abs_pose_refinement_options.position_prior_in_world =
+        rig_from_world_prior->TgtOriginInSrc();
+    abs_pose_refinement_options.position_prior_covariance =
+        position_prior_covariance.value_or(
+            0.05 * 0.05 * Eigen::Matrix3d::Identity());
+  }
 
   if (!RefineGeneralizedAbsolutePose(abs_pose_refinement_options,
                                      inlier_mask,
@@ -584,6 +689,44 @@ bool IncrementalMapper::RegisterNextGeneralFrame(const Options& options,
                                      &cameras)) {
     VLOG(2) << "Absolute pose refinement failed";
     return false;
+  }
+
+  // Post-refinement reprojection-based inlier recount when the prior
+  // fallback admitted all correspondences. Mirrors the single-camera
+  // path's gate so a bad prior + non-matching visual data can't sneak
+  // through as a successful registration.
+  if (used_prior_fallback) {
+    size_t actual_inliers = 0;
+    for (size_t i = 0; i < tri_points2D.size(); ++i) {
+      const size_t cam_idx = tri_camera_idxs[i];
+      const Rigid3d cam_from_world =
+          cams_from_rig[cam_idx] * rig_from_world;
+      const Eigen::Vector3d p_cam = cam_from_world * tri_points3D[i];
+      if (p_cam.z() <= 0) {
+        inlier_mask[i] = 0;
+        continue;
+      }
+      const std::optional<Eigen::Vector2d> p_img =
+          cameras[cam_idx].ImgFromCam(p_cam);
+      if (!p_img.has_value()) {
+        inlier_mask[i] = 0;
+        continue;
+      }
+      const double err = (*p_img - tri_points2D[i]).norm();
+      if (err <= options.abs_pose_max_error) {
+        ++actual_inliers;
+      } else {
+        inlier_mask[i] = 0;
+      }
+    }
+    if (actual_inliers <
+        static_cast<size_t>(options.abs_pose_min_num_inliers)) {
+      VLOG(2) << "Generalized prior-fallback registration rejected: only "
+              << actual_inliers << " of " << options.abs_pose_min_num_inliers
+              << " required inliers after refinement.";
+      return false;
+    }
+    num_inliers = actual_inliers;
   }
 
   //////////////////////////////////////////////////////////////////////////////

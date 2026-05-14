@@ -6,6 +6,7 @@
 #include "pycolmap/helpers.h"
 #include "pycolmap/pybind11_extension.h"
 
+#include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -164,6 +165,12 @@ void BindIncrementalPipeline(py::module& m) {
       .def_readwrite("ba_gpu_index",
                      &IncrementalPipelineOptions::ba_gpu_index,
                      "Index of CUDA GPU to use for BA, if available.")
+      .def_readwrite(
+          "ba_max_num_images_direct_sparse_gpu_solver",
+          &IncrementalPipelineOptions::ba_max_num_images_direct_sparse_gpu_solver,
+          "Above this image count, auto-select falls back from SPARSE_SCHUR + "
+          "cuDSS to ITERATIVE_SCHUR. Raising this keeps large global BAs on "
+          "cuDSS (memory permitting).")
       .def_readwrite("use_prior_position",
                      &Opts::use_prior_position,
                      "Whether to use priors on the camera positions.")
@@ -551,13 +558,41 @@ void BindIncrementalMapperImpl(py::module& m) {
            "Find best next images to register in the incremental "
            "reconstruction. This function automatically ignores images that "
            "failed to register for max_reg_trials.")
-      .def("register_next_image",
-           &IncrementalMapper::RegisterNextImage,
-           "options"_a,
-           "image_id"_a,
-           "Attempt to register image to the existing model. This requires "
-           "that a previous call to register_initial_image_pair was "
-           "successful.")
+      .def(
+          "register_next_image",
+          [](IncrementalMapper& self,
+             const IncrementalMapper::Options& options,
+             image_t image_id) {
+            return self.RegisterNextImage(options, image_id);
+          },
+          "options"_a,
+          "image_id"_a,
+          "Attempt to register image to the existing model. This requires "
+          "that a previous call to register_initial_image_pair was "
+          "successful.")
+      .def(
+          "register_next_image_with_prior",
+          [](IncrementalMapper& self,
+             const IncrementalMapper::Options& options,
+             image_t image_id,
+             const Rigid3d& cam_from_world_prior,
+             const Eigen::Matrix3d& position_prior_covariance) {
+            return self.RegisterNextImage(options,
+                                          image_id,
+                                          cam_from_world_prior,
+                                          position_prior_covariance);
+          },
+          "options"_a,
+          "image_id"_a,
+          "cam_from_world_prior"_a,
+          "position_prior_covariance"_a,
+          "Variant of register_next_image that seeds the pose refinement "
+          "with an IMU-derived prior (Phase 1 of tight-VI mapping). The "
+          "prior is added as a soft position constraint via "
+          "AbsolutePoseRefinementOptions::use_position_prior; if RANSAC "
+          "fails outright the function falls back to prior-seeded "
+          "refinement (rescues frames in low-texture regions). Pass a 3x3 "
+          "SPD covariance for the position prior (smaller = tighter).")
       .def("register_next_structure_less_image",
            &IncrementalMapper::RegisterNextStructureLessImage,
            "options"_a,

@@ -108,6 +108,14 @@ struct GlobalMapperOptions {
   bool skip_bundle_adjustment = false;
   bool skip_retriangulation = false;
 
+  // Path to a CSV of IMU-derived pairwise rotation edges between
+  // time-consecutive frames. When non-empty, the edges are merged into the
+  // visual pose graph before rotation averaging — supplying strong relative-
+  // rotation constraints even where visual matches are weak (dark rooms,
+  // blank walls). See reconstruction/lib/imu_pose_graph_edges.py for the
+  // CSV format. Empty disables.
+  std::string imu_edges_path;
+
   RotationEstimatorOptions RotationAveraging() const;
   GlobalPositionerOptions GlobalPositioning() const;
   BundleAdjustmentOptions BundleAdjustment() const;

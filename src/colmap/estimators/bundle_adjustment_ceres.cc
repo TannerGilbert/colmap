@@ -1157,7 +1157,18 @@ void PrintSolverSummary(const ceres::Solver::Summary& summary,
 
   log << std::right << std::setw(16) << "Termination : ";
   log << std::right << ceres::TerminationTypeToString(summary.termination_type)
-      << "\n\n";
+      << "\n";
+
+  log << std::right << std::setw(16) << "Linear solver : ";
+  log << std::right
+      << ceres::LinearSolverTypeToString(summary.linear_solver_type_used)
+      << " (sparse="
+      << ceres::SparseLinearAlgebraLibraryTypeToString(
+             summary.sparse_linear_algebra_library_type)
+      << ", dense="
+      << ceres::DenseLinearAlgebraLibraryTypeToString(
+             summary.dense_linear_algebra_library_type)
+      << ")\n\n";
   LOG(INFO) << log.str();
 }
 

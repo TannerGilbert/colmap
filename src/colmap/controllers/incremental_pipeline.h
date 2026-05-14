@@ -139,6 +139,7 @@ struct IncrementalPipelineOptions {
   bool ba_use_gpu = false;
   // GPU device index for bundle adjustment (-1 = auto-select).
   std::string ba_gpu_index = "-1";
+  int ba_max_num_images_direct_sparse_gpu_solver = 4000;
 
   // Bundle adjustment solver backend for local bundle adjustment.
   BundleAdjustmentBackend ba_local_backend = BundleAdjustmentBackend::CERES;

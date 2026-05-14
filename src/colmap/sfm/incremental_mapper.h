@@ -35,6 +35,8 @@
 #include "colmap/sfm/incremental_triangulator.h"
 #include "colmap/sfm/observation_manager.h"
 
+#include <optional>
+
 namespace colmap {
 
 // Class that provides all functionality for the incremental reconstruction
@@ -213,7 +215,30 @@ class IncrementalMapper {
 
   // Attempt to register image to the existing model. This requires that
   // a previous call to `RegisterInitialImagePair` was successful.
-  bool RegisterNextImage(const Options& options, image_t image_id);
+  //
+  // Optional pose prior (Phase 1 of tight-VI mapping): when
+  // `cam_from_world_prior` is provided, the prior position
+  // (camera centre in world coordinates) is added as a soft cost to
+  // `RefineAbsolutePose` via `AbsolutePoseRefinementOptions::
+  // use_position_prior`. If the standard absolute-pose RANSAC fails
+  // (e.g., too few features in a textureless region) AND a prior is
+  // provided, the function falls back to "prior + refinement" mode:
+  // use the prior as the initial pose, mark all 2D-3D correspondences
+  // as inliers, refine with robust loss, then re-check inliers by
+  // reprojection error. This rescues frames in low-texture sections
+  // where visual-only PnP cannot find enough geometrically consistent
+  // matches. When the prior is absent, behaviour is identical to the
+  // pre-existing RegisterNextImage path.
+  //
+  // `position_prior_covariance` is the 3x3 SPD covariance of the
+  // camera-centre prior in world coordinates (smaller = tighter
+  // anchor). Defaults to (5 cm)^2 isotropic if not provided.
+  bool RegisterNextImage(
+      const Options& options,
+      image_t image_id,
+      const std::optional<Rigid3d>& cam_from_world_prior = std::nullopt,
+      const std::optional<Eigen::Matrix3d>& position_prior_covariance =
+          std::nullopt);
 
   // Attempts to register image using structure-less resectioning as proposed in
   // "Structure from Motion Using Structure-less Resection" by Zheng and Wu.
@@ -353,7 +378,15 @@ class IncrementalMapper {
   };
 
   // Registers a frame using generalized absolute pose estimation.
-  bool RegisterNextGeneralFrame(const Options& options, Frame& frame);
+  // See `RegisterNextImage` for the meaning of the optional prior args.
+  // `rig_from_world_prior` is the prior in the rig frame, related to
+  // `cam_from_world_prior` via the ref-sensor's `sensor_from_rig`.
+  bool RegisterNextGeneralFrame(
+      const Options& options,
+      Frame& frame,
+      const std::optional<Rigid3d>& rig_from_world_prior = std::nullopt,
+      const std::optional<Eigen::Matrix3d>& position_prior_covariance =
+          std::nullopt);
 
   // Register / De-register frame in current reconstruction and update
   // the (shared) registration statistics.

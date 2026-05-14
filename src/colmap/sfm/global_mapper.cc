@@ -3,6 +3,7 @@
 #include "colmap/estimators/bundle_adjustment.h"
 #include "colmap/estimators/rotation_averaging.h"
 #include "colmap/geometry/pose_prior.h"
+#include "colmap/math/math.h"
 #include "colmap/scene/projection.h"
 #include "colmap/sfm/incremental_mapper.h"
 #include "colmap/sfm/observation_manager.h"
@@ -12,9 +13,101 @@
 #include "colmap/util/timer.h"
 
 #include <algorithm>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 namespace colmap {
 namespace {
+
+// Parses a CSV of IMU-derived rotation edges and adds them to the pose
+// graph. If an edge already exists for the same image pair (visual match
+// from the correspondence graph), the rotation is replaced with the IMU
+// estimate (more accurate over short baselines) and num_matches is set to
+// max(existing, weight) so the rotation-averaging spanning tree continues
+// to favour it. CSV columns: image_id1, image_id2, qw, qx, qy, qz, tx, ty,
+// tz, weight. Translation is ignored by rotation averaging but parsed so
+// the format stays a strict superset of a generic edge file.
+size_t LoadImuEdgesIntoPoseGraph(const std::string& path,
+                                 PoseGraph& pose_graph) {
+  std::ifstream fs(path);
+  THROW_CHECK(fs.is_open()) << "Cannot open IMU edges file: " << path;
+
+  std::string line;
+  // Skip header.
+  if (!std::getline(fs, line)) {
+    return 0;
+  }
+
+  size_t n_added = 0;
+  size_t n_merged = 0;
+  size_t row = 1;
+  while (std::getline(fs, line)) {
+    ++row;
+    if (line.empty()) {
+      continue;
+    }
+
+    std::stringstream ss(line);
+    std::string tok;
+    auto next = [&]() -> std::string {
+      THROW_CHECK(std::getline(ss, tok, ','))
+          << "Malformed IMU edges CSV at row " << row;
+      return tok;
+    };
+
+    const auto id1 = static_cast<image_t>(std::stoll(next()));
+    const auto id2 = static_cast<image_t>(std::stoll(next()));
+    const double qw = std::stod(next());
+    const double qx = std::stod(next());
+    const double qy = std::stod(next());
+    const double qz = std::stod(next());
+    const double tx = std::stod(next());
+    const double ty = std::stod(next());
+    const double tz = std::stod(next());
+    const int weight = static_cast<int>(std::stod(next()));
+
+    Eigen::Quaterniond q(qw, qx, qy, qz);
+    q.normalize();
+    const Rigid3d cam2_from_cam1(q, Eigen::Vector3d(tx, ty, tz));
+
+    PoseGraph::Edge edge(cam2_from_cam1);
+    edge.num_matches = weight;
+
+    if (pose_graph.HasEdge(id1, id2)) {
+      const auto& [existing, swapped] = pose_graph.EdgeRef(id1, id2);
+      edge.num_matches = std::max(existing.num_matches, weight);
+
+      // Log when the visual rotation we're about to overwrite differs
+      // significantly from the IMU rotation. The existing edge stores
+      // its rotation in canonical (smaller-id-first) order; bring the
+      // new IMU rotation into the same convention before comparing.
+      const Rigid3d imu_canonical =
+          (id1 > id2) ? Inverse(cam2_from_cam1) : cam2_from_cam1;
+      const double disagreement_deg =
+          RadToDeg(existing.cam2_from_cam1.rotation().angularDistance(
+              imu_canonical.rotation()));
+      constexpr double kMergeDisagreementLogThresholdDeg = 5.0;
+      if (disagreement_deg > kMergeDisagreementLogThresholdDeg) {
+        LOG(INFO) << "  IMU vs visual rotation disagreement on merge: "
+                  << "image_pair (" << id1 << ", " << id2
+                  << ")  Δ=" << disagreement_deg
+                  << " deg  (visual num_matches=" << existing.num_matches
+                  << ")";
+      }
+
+      pose_graph.UpdateEdge(id1, id2, std::move(edge));
+      ++n_merged;
+    } else {
+      pose_graph.AddEdge(id1, id2, std::move(edge));
+      ++n_added;
+    }
+  }
+
+  LOG(INFO) << "IMU pose-graph edges: " << n_added << " added, " << n_merged
+            << " merged with existing visual edges";
+  return n_added + n_merged;
+}
 
 bool RunBundleAdjustment(const BundleAdjustmentOptions& options,
                          Reconstruction& reconstruction,
@@ -458,6 +551,14 @@ bool GlobalMapper::Solve(const GlobalMapperOptions& options) {
   if (pose_graph_->Empty()) {
     LOG(ERROR) << "Cannot continue with empty pose graph";
     return false;
+  }
+
+  // Inject IMU-derived rotation edges before rotation averaging runs, so
+  // both RA passes (and gravity refinement, if enabled) see them.
+  if (!options.imu_edges_path.empty()) {
+    const size_t n =
+        LoadImuEdgesIntoPoseGraph(options.imu_edges_path, *pose_graph_);
+    LOG(INFO) << "Loaded " << n << " IMU rotation edges into pose graph";
   }
 
   // Run rotation averaging

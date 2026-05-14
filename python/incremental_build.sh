@@ -12,6 +12,7 @@ set -e
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
 pip install \
+    --break-system-packages \
     --no-build-isolation \
     -Cbuild-dir="$script_dir/build" \
     -ve \

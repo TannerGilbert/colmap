@@ -226,7 +226,12 @@ void BindSfM(py::module& m) {
                            &Opts::skip_global_positioning)
             .def_readwrite("skip_bundle_adjustment",
                            &Opts::skip_bundle_adjustment)
-            .def_readwrite("skip_retriangulation", &Opts::skip_retriangulation);
+            .def_readwrite("skip_retriangulation", &Opts::skip_retriangulation)
+            .def_readwrite("imu_edges_path",
+                           &Opts::imu_edges_path,
+                           "CSV of IMU-derived pairwise rotation edges; "
+                           "merged into the pose graph before rotation "
+                           "averaging when non-empty.");
     MakeDataclass(PyOpts);
   }
 

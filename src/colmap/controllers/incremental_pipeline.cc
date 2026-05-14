@@ -159,7 +159,7 @@ IncrementalTriangulator::Options IncrementalPipelineOptions::Triangulation()
 BundleAdjustmentOptions IncrementalPipelineOptions::LocalBundleAdjustment()
     const {
   BundleAdjustmentOptions options;
-  options.print_summary = false;
+  options.print_summary = true;
   options.backend = ba_local_backend;
   options.refine_focal_length = ba_refine_focal_length;
   options.refine_principal_point = ba_refine_principal_point;
@@ -185,6 +185,8 @@ BundleAdjustmentOptions IncrementalPipelineOptions::LocalBundleAdjustment()
         CeresBundleAdjustmentOptions::LossFunctionType::SOFT_L1;
     options.ceres->use_gpu = ba_use_gpu;
     options.ceres->gpu_index = ba_gpu_index;
+    options.ceres->max_num_images_direct_sparse_gpu_solver =
+        ba_max_num_images_direct_sparse_gpu_solver;
   }
   if (options.caspar) {
     options.caspar->gpu_index = ba_gpu_index;
@@ -195,7 +197,7 @@ BundleAdjustmentOptions IncrementalPipelineOptions::LocalBundleAdjustment()
 BundleAdjustmentOptions IncrementalPipelineOptions::GlobalBundleAdjustment()
     const {
   BundleAdjustmentOptions options;
-  options.print_summary = false;
+  options.print_summary = true;
   options.backend = ba_global_backend;
   options.refine_focal_length = ba_refine_focal_length;
   options.refine_principal_point = ba_refine_principal_point;
@@ -225,6 +227,8 @@ BundleAdjustmentOptions IncrementalPipelineOptions::GlobalBundleAdjustment()
         CeresBundleAdjustmentOptions::LossFunctionType::TRIVIAL;
     options.ceres->use_gpu = ba_use_gpu;
     options.ceres->gpu_index = ba_gpu_index;
+    options.ceres->max_num_images_direct_sparse_gpu_solver =
+        ba_max_num_images_direct_sparse_gpu_solver;
   }
   if (options.caspar) {
     options.caspar->gpu_index = ba_gpu_index;
